@@ -5,10 +5,10 @@ class SelfPlayParams:
     def __init__(self):
         # how many full AlphaZero iterations (self‑play + training)
         self.num_iters = 1000
-        # self‑play games per iteration
-        self.num_selfplay_games = 250
-        # MCTS simulations per move
-        self.num_mcts_sims = 400
+        # self‑play games per iteration 250
+        self.num_selfplay_games = 1
+        # MCTS simulations per move 400
+        self.num_mcts_sims = 4
         # exploration temperature
         self.exploration_temp = 1.0
         self.cpuct = 1.0
@@ -38,3 +38,7 @@ class ArenaParams:
     def __init__(self):
         self.num_games = 100
         self.replace_threshold = 0.6
+        self.num_mcts_sims = 400
+        self.cpuct = 1.0
+        import torch
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"

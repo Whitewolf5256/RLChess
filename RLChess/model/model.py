@@ -8,7 +8,7 @@ class ChessNet(nn.Module):
         self.conv1 = nn.Conv2d(18, 128, 3, padding=1)
         self.conv2 = nn.Conv2d(128, 128, 3, padding=1)
         self.fc1 = nn.Linear(128 * 8 * 8, 1024)
-        self.policy = nn.Linear(1024, 4672)  # Ensure output matches full action space
+        self.policy = nn.Linear(1024, 20480)  # Ensure output matches full action space
         self.value = nn.Linear(1024, 1)
 
     def forward(self, x):

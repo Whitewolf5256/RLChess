@@ -58,7 +58,8 @@ def self_play(nnet, buffer):
                 action = np.random.choice(len(pi), p=pi)
 
             # Save current state as tensor
-            state_tensor = game.encode_board(board)  # shape: (1, C, 8, 8)
+            flipped_board = board.mirror() if board.turn == chess.BLACK else board
+            state_tensor = game.encode_board(flipped_board)
             data.append((state_tensor, pi, None, 1))
 
             # # Get move before playing it
