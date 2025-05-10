@@ -16,23 +16,36 @@ def train(model, buffer, optimizer, cfg):
 
     for i in range(n_updates):
         batch = buffer.sample(cfg.batch_size)
-        states, pis, zs, ts = zip(*batch)
+        
+        # Now unpack 5 values: state, pi, z, t_rem, is_white
+        states, pis, zs, ts, is_white = zip(*batch)
 
-        # Data augmentation
+        # Data augmentation (symmetry)
         if cfg.use_symmetries:
             states, pis, zs = apply_symmetries(states, pis, zs)
 
         # Move to device
         device = cfg.device
-        states = torch.stack([torch.tensor(s) if not isinstance(s, torch.Tensor) else s for s in states]).to(device)
-        pis = torch.stack([torch.tensor(p, dtype=torch.float32) if not isinstance(p, torch.Tensor) else p for p in pis]).to(device)
+        states = torch.stack([
+            torch.tensor(s) if not isinstance(s, torch.Tensor) else s
+            for s in states
+        ]).to(device)
+
+        pis = torch.stack([
+            torch.tensor(p, dtype=torch.float32) if not isinstance(p, torch.Tensor) else p
+            for p in pis
+        ]).to(device)
+
         zs = torch.tensor(zs, dtype=torch.float32).view(-1, 1).to(device)
 
-        # Compute loss
+        # Compute predictions
         pred_p, pred_v = model(states)
+
+        # Compute loss
         invalid_mask = (pis != 0).float()
         loss, policy_loss, value_loss = compute_loss(pred_p, pred_v, pis, zs, invalid_mask, cfg)
 
+        # Optimizer step
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

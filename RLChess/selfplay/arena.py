@@ -13,7 +13,7 @@ def evaluate_new_model(game, model, best_model, cfg):
         mcts_players = [MCTS(game, p, cfg) for p in players]
         current = 0
         move_count = 0
-        max_moves = 500
+        max_moves = 80
 
         # Always enforce 1.d4 for the White player (player 0)
         d4_move = chess.Move.from_uci("d2d4")

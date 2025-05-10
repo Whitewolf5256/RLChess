@@ -112,3 +112,28 @@ class MCTS:
             if len(idxs) > 0:
                 probs[idxs] = 1.0 / len(idxs)
             return probs
+
+    def update_root(self, action):
+        """Advance the root to the child corresponding to the played action."""
+        if not hasattr(self, 'root_state'):
+           return  # No root to update from yet
+
+        # Get the string key for the current root state
+        s = self.game.string_representation(self.root_state)
+
+        # Apply the move to get the next state
+        next_state = self.game.get_next_state(self.root_state, action)
+        next_s = self.game.string_representation(next_state)
+
+        # Preserve subtree statistics under the new root
+        self.Qsa = { (next_s, a): self.Qsa.get((next_s, a), 0) for a in range(self.action_size) }
+        self.Nsa = { (next_s, a): self.Nsa.get((next_s, a), 0) for a in range(self.action_size) }
+
+        self.Ns = { next_s: self.Ns.get(next_s, 0) }
+        if next_s in self.Ps:
+           self.Ps = { next_s: self.Ps[next_s] }
+        else:
+            self.Ps = {}
+
+        # Update root
+        self.root_state = next_state
