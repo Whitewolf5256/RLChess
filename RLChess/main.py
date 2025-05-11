@@ -31,7 +31,7 @@ if __name__ == "__main__":
 
     # 4) Try loading existing global best model
     best_model = ChessNet().to(device)
-    best_model_path = "C:/Users/timcw/source/repos/RLChess/RLChess/checkpoints/best_model.pt"
+    best_model_path = "./checkpoints/best_model.pt"
     if os.path.exists(best_model_path):
         print(f"[Startup] Loading existing best model from {best_model_path}")
         best_model.load_state_dict(torch.load(best_model_path, map_location=device))
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     # 5) Create a unique folder for this run's iteration checkpoints
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     run_ckpt_dir = os.path.join(
-        "C:/Users/timcw/source/repos/RLChess/RLChess/checkpoints", f"run_{timestamp}")
+        "./checkpoints", f"run_{timestamp}")
     os.makedirs(run_ckpt_dir, exist_ok=True)
     print(f"[Init] Saving iteration checkpoints to: {run_ckpt_dir}")
 

@@ -3,7 +3,8 @@ import numpy as np
 import chess
 import chess.engine
 
-STOCKFISH_PATH = r"C:\\Users\\timcw\\Downloads\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe"
+# STOCKFISH_PATH = r"C:\\Users\\timcw\\Downloads\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe"
+STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
 
 def evaluate_new_model(game, model, best_model, cfg):
     import collections
@@ -12,6 +13,10 @@ def evaluate_new_model(game, model, best_model, cfg):
     best_wins = 0
     draws = 0
     tiebreak_new_better = 0
+    new_white_wins = 0
+    new_black_wins = 0
+    best_white_wins = 0
+    best_black_wins = 0
 
     engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
 
@@ -110,8 +115,16 @@ def evaluate_new_model(game, model, best_model, cfg):
     
                     if winning_model == "New":
                         new_wins += 1
+                        if winning_color == "White":
+                            new_white_wins += 1
+                        else:
+                            new_black_wins += 1
                     else:
                         best_wins += 1
+                        if winning_color == "White":
+                            best_white_wins += 1
+                        else:
+                            best_black_wins += 1
                 break
 
             current = 1 - current
@@ -125,5 +138,8 @@ def evaluate_new_model(game, model, best_model, cfg):
     print(f"Tiebreak Wins (New model better): {tiebreak_new_better}")
     print(f"Avg CP Loss — New: {total_new_cp_loss / max(draws, 1):.1f}, Best: {total_best_cp_loss / max(draws, 1):.1f}")
     print(f"Top Stockfish Move Matches — New: {top_match_counts['new']}, Best: {top_match_counts['best']} / {total_top_choices} total")
+    print(f"--- Win Breakdown by Color ---")
+    print(f"New Model — White Wins: {new_white_wins}, Black Wins: {new_black_wins}")
+    print(f"Best Model — White Wins: {best_white_wins}, Black Wins: {best_black_wins}\n)
 
     return new_wins, best_wins, draws, tiebreak_new_better, total_new_cp_loss, total_best_cp_loss, top_match_counts

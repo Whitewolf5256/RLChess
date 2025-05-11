@@ -2,57 +2,44 @@
 import numpy as np
 
 def apply_symmetries(states, pis, vs):
-    # placeholder for board symmetries
-    return states, pis, vs
+    return states, pis, vs  # Placeholder
 
 class ReplayBuffer:
     def __init__(self, size):
         self.size = size
+        self.max_per_category = size // 3
         self.white_wins = []
         self.black_wins = []
         self.draws = []
 
     def add(self, samples):
-        # Assume all samples in the list come from a single game
         if not samples:
             return
         outcome = samples[0][2]  # z value: +1 = white win, -1 = black win, 0 = draw
+
         if outcome == 1:
-            self.white_wins.extend(samples)
+            self._add_category(self.white_wins, samples)
         elif outcome == -1:
-            self.black_wins.extend(samples)
+            self._add_category(self.black_wins, samples)
         else:
-            self.draws.extend(samples)
+            self._add_category(self.draws, samples)
 
-        # Truncate all lists if total size exceeds buffer size
-        total = len(self)
-        if total > self.size:
-            # Proportionally trim each
-            over = total - self.size
-            self._trim_buffer(over)
-
-    def _trim_buffer(self, over):
-        for buf in [self.white_wins, self.black_wins, self.draws]:
-            if len(buf) > 0:
-                trim = min(over, len(buf))
-                del buf[:trim]
-                over -= trim
-                if over <= 0:
-                    break
+    def _add_category(self, buffer_list, samples):
+        buffer_list.extend(samples)
+        while len(buffer_list) > self.max_per_category:
+            excess = len(buffer_list) - self.max_per_category
+            del buffer_list[:excess]
 
     def sample_balanced(self, batch_size):
-        # Step 1: Get white win steps (up to 1/3 of batch)
-        target_per_class = batch_size // 3
-        white_steps = random.sample(self.white_wins, min(target_per_class, len(self.white_wins)))
+        per_class = batch_size // 3
+        white = random.sample(self.white_wins, min(per_class, len(self.white_wins)))
+        black = random.sample(self.black_wins, min(per_class, len(self.black_wins)))
+        draw_needed = batch_size - len(white) - len(black)
+        draw = random.sample(self.draws, min(draw_needed, len(self.draws)))
 
-        # Step 2: Match that number of black win steps
-        black_steps = random.sample(self.black_wins, min(len(white_steps), len(self.black_wins)))
+        print(f"[Buffer Sampling] white: {len(self.white_wins)}, black: {len(self.black_wins)}, draws: {len(self.draws)}")
 
-        # Step 3: Fill the rest with draw steps
-        remaining = batch_size - len(white_steps) - len(black_steps)
-        draw_steps = random.sample(self.draws, min(remaining, len(self.draws)))
-
-        return white_steps + black_steps + draw_steps
+        return white + black + draw
 
     def __len__(self):
         return len(self.white_wins) + len(self.black_wins) + len(self.draws)

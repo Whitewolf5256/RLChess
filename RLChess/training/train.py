@@ -33,8 +33,8 @@ def train(model, buffer, optimizer, cfg):
         states, pis, zs, ts, is_white = zip(*batch)
 
         # Count outcomes
-        white_win_count = sum(1 for z, is_w in zip(zs, is_white) if z == 1 and is_w)
-        black_win_count = sum(1 for z, is_w in zip(zs, is_white) if z == 1 and not is_w)
+        white_win_count = sum(1 for z, is_w in zip(zs, is_white) if (z == 1 and is_w) or (z == -1 and not is_w))
+        black_win_count = sum(1 for z, is_w in zip(zs, is_white) if (z == 1 and not is_w) or (z == -1 and is_w))
         tie_count = sum(1 for z in zs if z == 0)
 
         print(f"Batch composition: {white_win_count} white wins, {black_win_count} black wins, {tie_count} draws")

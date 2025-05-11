@@ -74,13 +74,13 @@ def self_play(nnet, buffer):
                 else:
                     draws += 1
                 print(f"[Self-Play] Game {g} ended: {'White' if z==1 else 'Black' if z==-1 else 'Draw'} (z={z}) in {t+1} plies")
-                print(f"[Self-Play] Cumulative → W:{white_wins}, B:{black_wins}, D:{draws}")
+                print(f"[Self-Play] Cumulative → White:{white_wins}, Black:{black_wins}, Draw:{draws}")
                 break
 
         if z == 0:
             draws += 1
             print(f"[Self-Play] Game {g} reached max plies. Declaring draw.")
-            print(f"[Self-Play] Cumulative → W:{white_wins}, B:{black_wins}, D:{draws}")
+            print(f"[Self-Play] Cumulative → White:{white_wins}, Black:{black_wins}, Draw:{draws}")
 
         # Add samples from both sides
         samples = []
