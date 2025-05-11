@@ -140,6 +140,6 @@ def evaluate_new_model(game, model, best_model, cfg):
     print(f"Top Stockfish Move Matches — New: {top_match_counts['new']}, Best: {top_match_counts['best']} / {total_top_choices} total")
     print(f"--- Win Breakdown by Color ---")
     print(f"New Model — White Wins: {new_white_wins}, Black Wins: {new_black_wins}")
-    print(f"Best Model — White Wins: {best_white_wins}, Black Wins: {best_black_wins}\n)
+    print(f"Best Model — White Wins: {best_white_wins}, Black Wins: {best_black_wins}\n")
 
     return new_wins, best_wins, draws, tiebreak_new_better, total_new_cp_loss, total_best_cp_loss, top_match_counts
