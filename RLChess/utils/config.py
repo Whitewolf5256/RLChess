@@ -4,7 +4,7 @@ import torch
 class SelfPlayParams:
     def __init__(self):
         self.num_iters = 100                  # Total training iterations
-        self.num_selfplay_games = 50          # Self-play games per iteration
+        self.num_selfplay_games = 100          # Self-play games per iteration
         self.num_mcts_sims = 100              # MCTS sims per move
         self.exploration_temp = 1.5           # Temperature for move selection
         self.cpuct = 1.5                      # Exploration-exploitation balance
@@ -15,8 +15,8 @@ class SelfPlayParams:
 class LearningParams:
     def __init__(self):
         self.use_symmetries = True
-        self.mem_buffer_size = 20000          # How many past games to remember
-        self.batch_size = 128                 # Training batch size
+        self.mem_buffer_size = 30000          # How many past games to remember
+        self.batch_size = 256                 # Training batch size
         self.loss_comp_batch_size = 256       # Optional: smaller for memory
         self.num_checkpoints = 10
         self.max_batches_per_checkpoint = 1000
@@ -29,7 +29,7 @@ class LearningParams:
 
 class ArenaParams:
     def __init__(self):
-        self.num_games = 50                   # Arena games for model comparison
+        self.num_games = 100                   # Arena games for model comparison
         self.replace_threshold = 0.55         # % new model must win to replace old
         self.num_mcts_sims = 100              # Match self-play value
         self.cpuct = 1.5                   # Match self-play value

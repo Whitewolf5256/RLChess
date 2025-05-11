@@ -1,4 +1,4 @@
-﻿import time
+﻿import time 
 import numpy as np
 import chess
 from mcts.mcts import MCTS
@@ -15,20 +15,19 @@ def self_play(nnet, buffer):
     cfg = SelfPlayParams()
 
     white_wins, black_wins, draws = 0, 0, 0
-    local_white_added, local_black_added = 0, 0
 
     for g in range(cfg.num_selfplay_games):
         board = game.reset()
-        mcts = MCTS(game, nnet, cfg)           # reuse one MCTS per game
+        mcts = MCTS(game, nnet, cfg)
         mcts.root_state = board
-        data = []   # list of (state_tensor, pi, flipped, t_rem, is_white)
+        data = []   # (state_tensor, pi, flipped, is_white)
         z = 0
 
         for t in range(getattr(cfg, 'max_game_length', 80)):
             valid = game.get_valid_moves(board)
             pi = np.zeros_like(valid, dtype=np.float32)
 
-            # Force 1.d4 on White's first move
+            # Force 1.d4 on first move
             if board.turn == chess.WHITE and t == 0:
                 move = chess.Move.from_uci("d2d4")
                 action = game.move_to_index.get(move)
@@ -37,7 +36,6 @@ def self_play(nnet, buffer):
                     break
                 pi[action] = 1.0
             else:
-                # temperature: boost white exploration by 1.5×
                 temp = cfg.exploration_temp
                 if board.turn == chess.WHITE:
                     temp *= 1.5
@@ -57,18 +55,16 @@ def self_play(nnet, buffer):
                     pi = pi / s
                 action = np.random.choice(len(pi), p=pi)
 
-            # record sample
             flipped = (board.turn == chess.BLACK)
             state = board.mirror() if flipped else board
             state_tensor = game.encode_board(state)
             is_white = not flipped
-            data.append((state_tensor, pi, flipped, 1, is_white))
 
-            # play and advance tree
+            data.append((state_tensor, pi, flipped, is_white))
+
             board = game.get_next_state(board, action)
             mcts.update_root(action)
 
-            # check end
             z = game.get_game_ended(board)
             if z != 0:
                 if z == 1:
@@ -86,15 +82,14 @@ def self_play(nnet, buffer):
             print(f"[Self-Play] Game {g} reached max plies. Declaring draw.")
             print(f"[Self-Play] Cumulative → W:{white_wins}, B:{black_wins}, D:{draws}")
 
-        # prepare samples with reward-flip correctness
+        # Add samples from both sides
         samples = []
-        for i, (s_tensor, p, flipped, _, is_white) in enumerate(data):
+        for i, (s_tensor, p, flipped, is_white) in enumerate(data):
             t_rem = len(data) - i
-            z_final = -z if flipped else z
+            z_final = -z if flipped else z  # assign +1 if that side won, -1 if lost
             samples.append((s_tensor, p, z_final, t_rem, is_white))
 
         buffer.add(samples)
-
 
     print(f"[Self-Play Summary] White: {white_wins}, Black: {black_wins}, Draws: {draws}")
     return white_wins, black_wins, draws

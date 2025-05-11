@@ -41,20 +41,18 @@ class ReplayBuffer:
                     break
 
     def sample_balanced(self, batch_size):
-        # Step 1: Pick as many white wins as available, up to batch_size
-        white_count = min(len(self.white_wins), batch_size)
-        white = random.sample(self.white_wins, white_count)
+        # Step 1: Get white win steps (up to 1/3 of batch)
+        target_per_class = batch_size // 3
+        white_steps = random.sample(self.white_wins, min(target_per_class, len(self.white_wins)))
 
-        # Step 2: Match that many black wins
-        black_count = min(len(self.black_wins), white_count)
-        black = random.sample(self.black_wins, black_count)
+        # Step 2: Match that number of black win steps
+        black_steps = random.sample(self.black_wins, min(len(white_steps), len(self.black_wins)))
 
-        # Step 3: Fill the rest with draws
-        remaining = batch_size - len(white) - len(black)
-        remaining = max(batch_size - len(white) - len(black), 0)
-        draw = random.sample(self.draws, min(remaining, len(self.draws)))
-        return white + black + draw
+        # Step 3: Fill the rest with draw steps
+        remaining = batch_size - len(white_steps) - len(black_steps)
+        draw_steps = random.sample(self.draws, min(remaining, len(self.draws)))
 
+        return white_steps + black_steps + draw_steps
 
     def __len__(self):
         return len(self.white_wins) + len(self.black_wins) + len(self.draws)
