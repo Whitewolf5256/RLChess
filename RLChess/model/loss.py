@@ -1,4 +1,6 @@
-﻿def compute_loss(pred_p, pred_v, target_p, target_v, invalid_mask, cfg):
+﻿import torch.nn.functional as F
+ 
+def compute_loss(pred_p, pred_v, target_p, target_v, invalid_mask, cfg):
     # Ensure invalid_mask matches pred_p shape
     if invalid_mask.shape != pred_p.shape:
         raise ValueError(f"Shape mismatch: invalid_mask {invalid_mask.shape}, pred_p {pred_p.shape}")

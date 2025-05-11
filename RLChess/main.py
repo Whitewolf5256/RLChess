@@ -29,11 +29,30 @@ if __name__ == "__main__":
     # 3) Create replay buffer
     replay_buffer = ReplayBuffer(lr_cfg.mem_buffer_size)
 
-    # 4) No best_model until after first training
-    best_model = None
+    # 4) Try loading existing global best model
+    best_model = ChessNet().to(device)
+    best_model_path = "C:/Users/timcw/source/repos/RLChess/RLChess/checkpoints/best_model.pt"
+    if os.path.exists(best_model_path):
+        print(f"[Startup] Loading existing best model from {best_model_path}")
+        best_model.load_state_dict(torch.load(best_model_path, map_location=device))
+        use_existing = True
+    else:
+        print("[Startup] No best model found, starting from scratch.")
+        best_model = None
+        use_existing = False
+
     win_rates = []
 
-    # 5) Main AlphaZero loop
+    # 5) Create a unique folder for this run's iteration checkpoints
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    run_ckpt_dir = os.path.join(
+        "C:/Users/timcw/source/repos/RLChess/RLChess/checkpoints", f"run_{timestamp}")
+    os.makedirs(run_ckpt_dir, exist_ok=True)
+    print(f"[Init] Saving iteration checkpoints to: {run_ckpt_dir}")
+
+    # 6) Main AlphaZero loop
+    prev_loss_avg = float('inf')
+
     for iteration in range(sp_cfg.num_iters):
         iter_start = time.time()
         print(f"\n[Iteration {iteration+1}/{sp_cfg.num_iters}] Starting at {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -50,43 +69,57 @@ if __name__ == "__main__":
         tr_duration = time.time() - tr_start
         print(f"[Iteration {iteration+1}] Training: avg loss={loss_avg:.4f}, buffer size={len(replay_buffer)} (took {tr_duration:.1f}s)")
 
-        # — Evaluation phase (skip Arena on first iteration)
-        if iteration == 0:
-            # Save trained model as best model
+        # — Evaluation phase
+        if iteration == 0 and best_model is None:
+            # first iteration, no prior best
             best_model = ChessNet().to(device)
             best_model.load_state_dict(nnet.state_dict())
             win_rates.append(0.0)
+            prev_loss_avg = loss_avg
             print("[Iteration 1] No arena run — using trained model as initial best model.")
         else:
+            # evaluate new candidate vs best
             model = ChessNet().to(device)
-            model.load_state_dict(nnet.state_dict())  # Load state of the trained model into the new instance
-
-            # Evaluate against best model
+            model.load_state_dict(nnet.state_dict())
             game = ChessGame()
-            new_wins, best_wins = evaluate_new_model(game, best_model, best_model, arena_cfg)  # Pass `model` instead of `nnet`
+            (
+                new_wins, best_wins, draws,
+                tiebreak_new_better,
+                total_new_cp_loss, total_best_cp_loss,
+                top_match_counts
+            ) = evaluate_new_model(game, model, best_model, arena_cfg)
+
             winrate = new_wins / max((new_wins + best_wins), 1)
             win_rates.append(winrate)
             print(f"[Iteration {iteration+1}] Arena win rate: {winrate:.2%}")
 
-            # Replace best model if performance exceeds threshold
-            if winrate > arena_cfg.replace_threshold:
+            # replacement criterion: better wins or tie-break by lower cp-loss
+            if (new_wins > best_wins) or (new_wins == best_wins and total_new_cp_loss < total_best_cp_loss):
+                best_model = ChessNet().to(device)
                 best_model.load_state_dict(nnet.state_dict())
-                print(f"[Iteration {iteration+1}] New model accepted as best model.")
+                print(f"[Iteration {iteration+1}] New model accepted as best (win/tie-break).")
+            else:
+                print(f"[Iteration {iteration+1}] Best model retained.")
 
-        # — Save checkpoint
-        ckpt_dir = f"C:/Users/timcw/source/repos/RLChess/RLChess/checkpoints/"
-        os.makedirs(ckpt_dir, exist_ok=True)  # Create the directory if it doesn't exist
-        ckpt_path = os.path.join(ckpt_dir, f"model_iter{iteration+1}.pt")
+            prev_loss_avg = loss_avg
 
+        # — Save iteration checkpoint
+        ckpt_path = os.path.join(run_ckpt_dir, f"model_iter{iteration+1}.pt")
         torch.save(nnet.state_dict(), ckpt_path)
         iter_duration = time.time() - iter_start
         print(f"[Iteration {iteration+1}] Checkpoint saved to {ckpt_path} (iteration took {iter_duration:.1f}s)")
 
-    # 6) Plot win rate chart
+        # — Save/overwrite global best model file if we have one
+        if best_model is not None:
+            torch.save(best_model.state_dict(), best_model_path)
+            print(f"[Iteration {iteration+1}] Global best model saved to: {best_model_path}")
+
+    # 7) Plot win rate chart
+    chart_path = os.path.join(run_ckpt_dir, "arena_winrates.png")
     plt.plot(range(1, len(win_rates)+1), win_rates)
     plt.xlabel("Iteration")
     plt.ylabel("Arena Win Rate")
     plt.title("Model Improvement Over Time")
     plt.grid(True)
-    plt.savefig("arena_winrates.png")
-    print("Arena win rate chart saved to 'arena_winrates.png'")
+    plt.savefig(chart_path)
+    print(f"Arena win rate chart saved to '{chart_path}'")

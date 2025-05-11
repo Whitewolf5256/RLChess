@@ -3,8 +3,8 @@ import torch
 
 class SelfPlayParams:
     def __init__(self):
-        self.num_iters = 500                  # Total training iterations
-        self.num_selfplay_games = 80          # Self-play games per iteration
+        self.num_iters = 100                  # Total training iterations
+        self.num_selfplay_games = 50          # Self-play games per iteration
         self.num_mcts_sims = 100              # MCTS sims per move
         self.exploration_temp = 1.5           # Temperature for move selection
         self.cpuct = 1.5                      # Exploration-exploitation balance
@@ -29,8 +29,8 @@ class LearningParams:
 
 class ArenaParams:
     def __init__(self):
-        self.num_games = 80                   # Arena games for model comparison
+        self.num_games = 50                   # Arena games for model comparison
         self.replace_threshold = 0.55         # % new model must win to replace old
         self.num_mcts_sims = 100              # Match self-play value
-        self.cpuct = 1.5                      # Match self-play value
+        self.cpuct = 1.5                   # Match self-play value
         self.device = "cuda" if torch.cuda.is_available() else "cpu"

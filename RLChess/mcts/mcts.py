@@ -11,28 +11,24 @@ class MCTS:
         self.Nsa = {}   # visit count for (s,a)
         self.Ns  = {}   # visit count for s
         self.Ps  = {}   # initial policy returned by neural net for s
+        self.root_state = None
 
     def search(self, state):
-        # If terminal state, return negative reward (from current player's perspective)
         if state.is_game_over():
             z = self.game.get_game_ended(state)
             return -z
 
         s = self.game.string_representation(state)
 
-        # Expand leaf node
         if s not in self.Ps:
-            # Get policy and value from neural network
             board_t = torch.tensor(self.game.encode_board(state), dtype=torch.float32)
             board_t = board_t.unsqueeze(0).to(self.cfg.device)
             policy_logits, value = self.nnet(board_t)
             policy = policy_logits.detach().cpu().numpy().flatten()
 
-            # Mask invalid moves
             valid = self.game.get_valid_moves(state)
             policy = policy * valid
 
-            # Normalize or fallback
             total_policy = policy.sum()
             total_valid = valid.sum()
             if total_policy > 0:
@@ -40,14 +36,12 @@ class MCTS:
             elif total_valid > 0:
                 policy = valid / total_valid
             else:
-                # No valid moves: uniform over full action space
                 policy = np.ones_like(valid, dtype=np.float32) / len(valid)
 
             self.Ps[s] = policy
             self.Ns[s] = 0
             return -value.item()
 
-        # Select action with highest UCT score
         valid = self.game.get_valid_moves(state)
         policy = self.Ps[s]
         best_act = None
@@ -61,15 +55,12 @@ class MCTS:
                 best_score = u
                 best_act = a
 
-        # If no valid action found, treat as terminal draw
         if best_act is None:
             return 0
 
-        # Recurse
         next_state = self.game.get_next_state(state, best_act)
         v = self.search(next_state)
 
-        # Update Qsa, Nsa, Ns
         old_q = self.Qsa.get((s, best_act), 0)
         old_n = self.Nsa.get((s, best_act), 0)
         self.Qsa[(s, best_act)] = (old_n * old_q + v) / (old_n + 1)
@@ -78,7 +69,9 @@ class MCTS:
         return -v
 
     def get_action_probs(self, state, temp=1):
-        # Run simulations
+        if self.root_state is None:
+            self.root_state = state
+
         for _ in range(self.cfg.num_mcts_sims):
             self.search(state)
 
@@ -86,7 +79,6 @@ class MCTS:
         valid = self.game.get_valid_moves(state)
         counts = np.array([self.Nsa.get((s, a), 0) for a in range(len(valid))], dtype=np.float32)
 
-        # If no visits, uniform over valid
         if counts.sum() == 0:
             idxs = np.nonzero(valid)[0]
             probs = np.zeros_like(counts)
@@ -94,7 +86,6 @@ class MCTS:
                 probs[idxs] = 1.0 / len(idxs)
             return probs
 
-        # Temperature
         if temp == 0:
             bests = np.argwhere(counts == counts.max()).flatten()
             probs = np.zeros_like(counts)
@@ -106,7 +97,6 @@ class MCTS:
         if total > 0:
             return counts / total
         else:
-            # fallback uniform
             idxs = np.nonzero(valid)[0]
             probs = np.zeros_like(counts)
             if len(idxs) > 0:
@@ -114,26 +104,8 @@ class MCTS:
             return probs
 
     def update_root(self, action):
-        """Advance the root to the child corresponding to the played action."""
-        if not hasattr(self, 'root_state'):
-           return  # No root to update from yet
+        if self.root_state is None:
+            return
 
-        # Get the string key for the current root state
-        s = self.game.string_representation(self.root_state)
-
-        # Apply the move to get the next state
         next_state = self.game.get_next_state(self.root_state, action)
-        next_s = self.game.string_representation(next_state)
-
-        # Preserve subtree statistics under the new root
-        self.Qsa = { (next_s, a): self.Qsa.get((next_s, a), 0) for a in range(self.action_size) }
-        self.Nsa = { (next_s, a): self.Nsa.get((next_s, a), 0) for a in range(self.action_size) }
-
-        self.Ns = { next_s: self.Ns.get(next_s, 0) }
-        if next_s in self.Ps:
-           self.Ps = { next_s: self.Ps[next_s] }
-        else:
-            self.Ps = {}
-
-        # Update root
         self.root_state = next_state
