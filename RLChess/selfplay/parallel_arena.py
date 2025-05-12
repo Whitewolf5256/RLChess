@@ -1,12 +1,14 @@
 ﻿import multiprocessing as mp
+from os import system
+import os
 import numpy as np
 import chess
 import chess.engine
 from mcts.mcts import MCTS
 from utils.logging import log_arena_results
 
-STOCKFISH_PATH = r"C:\Users\timcw\Downloads\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
-#STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
+#STOCKFISH_PATH = r"C:\Users\timcw\Downloads\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
+STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
 
 def run_arena_game(args):
     game, model, best_model, cfg, game_index = args
@@ -102,7 +104,15 @@ def _worker(args):
 
 def parallel_arena(game, model, best_model, cfg):
     num_games = cfg.num_games
-    num_cpus = min(4, mp.cpu_count(), num_games)
+
+    if system == "Windows":
+        num_cpus = os.cpu_count()  # Windows should be fine with this as it uses fork
+    elif system == "Darwin":  # macOS
+        num_cpus = os.cpu_count()  # This should be 8 for MacBook M1, but we can set a custom value if needed.
+    else:
+        num_cpus = os.cpu_count()
+    num_cpus = int(min(num_cpus / 2 , num_games))  # Ensure num_cpus is an integer
+
     print(f"[INFO] Running {num_games} arena games using {num_cpus} CPUs...")
     
     model.to("cpu")
