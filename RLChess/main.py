@@ -14,7 +14,7 @@ from training.optimiser import get_optimizer
 from training.train import train
 from utils.utils import ReplayBuffer
 from utils.config import SelfPlayParams, LearningParams, ArenaParams
-from selfplay.selfplay import self_play
+from selfplay.selfplay import self_play_gpu_single_process
 from selfplay.arena import evaluate_new_model
 from chess_env.chess_game import ChessGame
 from selfplay.parallel_selfplay import parallel_self_play
@@ -77,8 +77,8 @@ if __name__ == "__main__":
 
         # — Self-play phase
         sp_start = time.time()
-        #games_played = self_play(nnet, replay_buffer)
-        games_played = parallel_self_play(nnet, replay_buffer)
+        games_played = self_play_gpu_single_process(nnet, replay_buffer)
+        #games_played = parallel_self_play(nnet, replay_buffer)
         sp_duration = time.time() - sp_start
         print(f"[Iteration {iteration+1}] Self-play: {games_played} games, buffer size={len(replay_buffer)} (took {sp_duration:.1f}s)")
 
