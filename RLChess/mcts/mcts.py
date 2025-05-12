@@ -2,6 +2,9 @@
 import numpy as np
 import torch
 
+# ✅ Enable cuDNN benchmarking (optional, speeds up conv layers if input shapes are static)
+torch.backends.cudnn.benchmark = True
+
 class MCTS:
     def __init__(self, game, nnet, cfg):
         self.game = game
@@ -21,29 +24,37 @@ class MCTS:
         s = self.game.string_representation(state)
 
         if s not in self.Ps:
-            board_t = torch.tensor(self.game.encode_board(state), dtype=torch.float32)
-            board_t = board_t.unsqueeze(0).to(self.cfg.device)
-            policy_logits, value = self.nnet(board_t)
-            policy = policy_logits.detach().cpu().numpy().flatten()
+            # ✅ Push to GPU once here
+            board_np = self.game.encode_board(state)
+            board_t = torch.tensor(board_np, dtype=torch.float32, device=self.cfg.device).unsqueeze(0)
 
-            valid = self.game.get_valid_moves(state)
-            policy = policy * valid
+            # ✅ Batched inference for a single input
+            with torch.no_grad():
+                policy_logits, value = self.nnet(board_t)
+
+            policy = policy_logits[0].softmax(dim=0)  # already on GPU
+            valid = torch.tensor(self.game.get_valid_moves(state), device=self.cfg.device, dtype=torch.float32)
+
+            policy = policy * valid  # ✅ Remain on GPU
 
             total_policy = policy.sum()
             total_valid = valid.sum()
+
             if total_policy > 0:
                 policy = policy / total_policy
             elif total_valid > 0:
                 policy = valid / total_valid
             else:
-                policy = np.ones_like(valid, dtype=np.float32) / len(valid)
+                policy = torch.ones_like(valid) / len(valid)
 
-            self.Ps[s] = policy
+            # ✅ Store policy on CPU (we assume large dict storage best kept off GPU)
+            self.Ps[s] = policy.cpu().numpy()
             self.Ns[s] = 0
             return -value.item()
 
         valid = self.game.get_valid_moves(state)
         policy = self.Ps[s]
+
         best_act = None
         best_score = -float('inf')
 

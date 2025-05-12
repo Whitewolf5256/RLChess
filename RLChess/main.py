@@ -6,6 +6,8 @@ import numpy as np
 import time
 import torch
 import matplotlib.pyplot as plt
+import multiprocessing as mp
+
 from model.model import ChessNet
 from training.optimiser import get_optimizer
 from training.train import train
@@ -14,8 +16,14 @@ from utils.config import SelfPlayParams, LearningParams, ArenaParams
 from selfplay.selfplay import self_play
 from selfplay.arena import evaluate_new_model
 from chess_env.chess_game import ChessGame
-
+from selfplay.parallel_selfplay import parallel_self_play
+from selfplay.parallel_arena import parallel_arena
 if __name__ == "__main__":
+    mp.set_start_method('spawn')
+    
+    torch.backends.cudnn.benchmark = True
+    torch.cuda.set_per_process_memory_fraction(0.5)
+
     # 1) Load configs
     sp_cfg = SelfPlayParams()
     lr_cfg = LearningParams()
@@ -59,7 +67,8 @@ if __name__ == "__main__":
 
         # — Self-play phase
         sp_start = time.time()
-        games_played = self_play(nnet, replay_buffer)
+        #games_played = self_play(nnet, replay_buffer)
+        games_played = parallel_self_play(nnet, replay_buffer)
         sp_duration = time.time() - sp_start
         print(f"[Iteration {iteration+1}] Self-play: {games_played} games, buffer size={len(replay_buffer)} (took {sp_duration:.1f}s)")
 
@@ -81,13 +90,20 @@ if __name__ == "__main__":
             # evaluate new candidate vs best
             model = ChessNet().to(device)
             model.load_state_dict(nnet.state_dict())
+            # game = ChessGame()
+            # (
+            #     new_wins, best_wins, draws,
+            #     tiebreak_new_better,
+            #     total_new_cp_loss, total_best_cp_loss,
+            #     top_match_counts
+            # ) = evaluate_new_model(game, model, best_model, arena_cfg)
             game = ChessGame()
             (
                 new_wins, best_wins, draws,
                 tiebreak_new_better,
                 total_new_cp_loss, total_best_cp_loss,
                 top_match_counts
-            ) = evaluate_new_model(game, model, best_model, arena_cfg)
+            ) = parallel_arena(game, model, best_model, arena_cfg)
 
             winrate = new_wins / max((new_wins + best_wins), 1)
             win_rates.append(winrate)

@@ -26,19 +26,21 @@ class ReplayBuffer:
 
     def _add_category(self, buffer_list, samples):
         buffer_list.extend(samples)
+        # FIFO: remove oldest if overflow
         while len(buffer_list) > self.max_per_category:
-            excess = len(buffer_list) - self.max_per_category
-            del buffer_list[:excess]
+            del buffer_list[0:(len(buffer_list) - self.max_per_category)]
 
     def sample_balanced(self, batch_size):
         per_class = batch_size // 3
-        white = random.sample(self.white_wins, min(per_class, len(self.white_wins)))
-        black = random.sample(self.black_wins, min(per_class, len(self.black_wins)))
-        draw_needed = batch_size - len(white) - len(black)
-        draw = random.sample(self.draws, min(draw_needed, len(self.draws)))
 
-        print(f"[Buffer Sampling] white: {len(self.white_wins)}, black: {len(self.black_wins)}, draws: {len(self.draws)}")
+        # Determine how much we *can* sample per class
+        actual_per_class = min(len(self.white_wins), len(self.black_wins), len(self.draws), per_class)
 
+        white = random.sample(self.white_wins, actual_per_class)
+        black = random.sample(self.black_wins, actual_per_class)
+        draw = random.sample(self.draws, actual_per_class)
+
+        print(f"[Buffer Sampling] white: {len(white)}, black: {len(black)}, draws: {len(draw)}")
         return white + black + draw
 
     def __len__(self):

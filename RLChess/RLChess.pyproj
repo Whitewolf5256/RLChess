@@ -26,11 +26,14 @@
     <Compile Include="mcts\mcts.py" />
     <Compile Include="model\loss.py" />
     <Compile Include="model\model.py" />
+    <Compile Include="selfplay\parallel_arena.py" />
     <Compile Include="selfplay\arena.py" />
+    <Compile Include="selfplay\parallel_selfplay.py" />
     <Compile Include="selfplay\selfplay.py" />
     <Compile Include="training\optimiser.py" />
     <Compile Include="training\memory.py" />
     <Compile Include="training\train.py" />
+    <Compile Include="utils\logging.py" />
     <Compile Include="utils\utils.py" />
     <Compile Include="utils\config.py" />
   </ItemGroup>

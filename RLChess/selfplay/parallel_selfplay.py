@@ -1,99 +1,116 @@
-﻿# chess_alpha/selfplay/parallel_selfplay.py
-import torch
+﻿import multiprocessing as mp
 import numpy as np
-import multiprocessing as mp
-from chess_env.chess_game import ChessGame
-from mcts.mcts import MCTS
-from utils.config import SelfPlayParams
 import chess
+from mcts.mcts import MCTS
+from chess_env.chess_game import ChessGame
+from utils.config import SelfPlayParams
+from utils.logging import log_self_play_results
 
-def self_play_worker(worker_id, nnet_weights, cfg, result_queue, device):
-    torch.cuda.set_device(device)
+def run_self_play_game(nnet, cfg):
     game = ChessGame()
-    nnet = cfg.model_class().to(device)
-    nnet.load_state_dict(nnet_weights)
-    nnet.eval()
+    board = game.reset()
+    mcts = MCTS(game, nnet, cfg)
+    mcts.root_state = board
+    data = []
 
-    samples = []
-    white_wins, black_wins, draws = 0, 0, 0
+    for t in range(cfg.max_game_length):
+        valid = game.get_valid_moves(board)
+        pi = np.zeros_like(valid, dtype=np.float32)
 
-    for g in range(cfg.games_per_worker):
-        board = game.reset()
-        data = []
+        if board.turn == chess.WHITE and t == 0:
+            move = board.parse_uci("d2d4")
+            action = game.move_to_index.get(move)
+            if action is None or valid[action] == 0:
+                print("[WARN] Invalid forced opening. Drawing game.")
+                return [], 0, 0, 1
+            pi[action] = 1.0
+        else:
+            temp = cfg.exploration_temp
+            if board.turn == chess.WHITE:
+                temp *= 1.5
+            if t >= cfg.temperature_cutoff:
+                temp = 0
+
+            pi = mcts.get_action_probs(board, temp)
+
+            s = pi.sum()
+            if s <= 0 or np.isnan(s):
+                print(f"[WARN] Bad pi vector at step {t}, fixing...")
+                idxs = np.nonzero(valid)[0]
+                if len(idxs):
+                    pi = np.zeros_like(pi)
+                    pi[idxs] = 1.0 / len(idxs)
+                else:
+                    pi = np.ones_like(pi) / pi.size
+            else:
+                pi = pi / s
+
+            action = np.random.choice(len(pi), p=pi)
+
+        flipped = (board.turn == chess.BLACK)
+        state = board.mirror() if flipped else board
+        state_tensor = game.encode_board(state)
+        is_white = not flipped
+        data.append((state_tensor, pi, flipped, is_white))
+
+        board = game.get_next_state(board, action)
+        mcts.update_root(action)
+
+        z = game.get_game_ended(board)
+        if z != 0:
+            # print(f"[INFO] Game ended after {t+1} moves. Result: {z}")
+            break
+
+    if z == 0:
+        # print("[INFO] Game ended by timeout.")
         z = 0
 
-        for t in range(500):
-            valid_moves = game.get_valid_moves(board)
-            pi = np.zeros_like(valid_moves, dtype=np.float32)
+    samples = []
+    for i, (s_tensor, p, flipped, is_white) in enumerate(data):
+        t_rem = len(data) - i
+        z_final = -z if flipped else z
+        samples.append((s_tensor, p, z_final, t_rem, is_white))
 
-            if board.turn == chess.WHITE and t == 0:
-                move = chess.Move.from_uci("d2d4")
-                action = game.move_to_index.get(move)
-                if action is None or valid_moves[action] == 0:
-                    break
-                pi[action] = 1.0
-            else:
-                mcts = MCTS(game, nnet, cfg)
-                pi = mcts.get_action_probs(board, cfg.exploration_temp)
-                pi = pi / np.sum(pi) if np.sum(pi) > 0 else np.ones_like(pi) / len(pi)
+    return samples, int(z == 1), int(z == -1), int(z == 0)
 
-                action = np.random.choice(len(pi), p=pi)
+def _worker(args):
+    nnet, cfg = args
+    return run_self_play_game(nnet, cfg)
 
-            state_tensor = game.encode_board(board)
-            data.append((state_tensor, pi, None, 1))
-            board = game.get_next_state(board, action)
-
-            z = game.get_game_ended(board)
-            if z != 0:
-                if z == 1:
-                    white_wins += 1
-                elif z == -1:
-                    black_wins += 1
-                else:
-                    draws += 1
-                break
-
-        if z == 0:
-            draws += 1
-            z = 0
-
-        for i, (s_tensor, p, _, _) in enumerate(data):
-            t_rem = len(data) - i
-            samples.append((s_tensor, p, z, t_rem))
-
-    result_queue.put((samples, white_wins, black_wins, draws))
-
-def parallel_self_play(nnet, buffer, device):
+def parallel_self_play(nnet, buffer):
+    """
+    Launch parallel self-play using multiprocessing.
+    Saves (state_tensor, pi, z, t_rem, is_white) to buffer.
+    Returns (white_win_count, black_win_count, draw_count)
+    """
     cfg = SelfPlayParams()
-    num_procs = cfg.num_parallel_games
-    games_per_worker = cfg.num_selfplay_games // num_procs
+    num_games = cfg.num_selfplay_games
+    num_cpus = min(4, mp.cpu_count(), num_games)  # ✨ limit to 4 CPUs max
 
-    ctx = mp.get_context("spawn")
-    result_queue = ctx.Queue()
+    white_wins, black_wins, draws = 0, 0, 0
+    total_games_played = 0
 
-    nnet_weights = nnet.state_dict()
-    nnet_shareable = {k: v.clone().detach().cpu() for k, v in nnet_weights.items()}
+    def play_batch(batch_size):
+        nonlocal white_wins, black_wins, draws, total_games_played
+        print(f"[INFO] Launching {batch_size} self-play games using {num_cpus} processes...")
+        with mp.Pool(processes=num_cpus) as pool:
+            results = pool.map(_worker, [(nnet, cfg)] * batch_size)
 
-    procs = []
-    for i in range(num_procs):
-        p = ctx.Process(
-            target=self_play_worker,
-            args=(i, nnet_shareable, cfg, result_queue, device.index if device.type == "cuda" else None)
-        )
-        p.start()
-        procs.append(p)
+        for samples, w, b, d in results:
+            if samples:
+                buffer.add(samples)
+            white_wins += w
+            black_wins += b
+            draws += d
+        total_games_played += batch_size
 
-    all_samples = []
-    total_white, total_black, total_draws = 0, 0, 0
-    for _ in range(num_procs):
-        samples, white, black, draws = result_queue.get()
-        all_samples.extend(samples)
-        total_white += white
-        total_black += black
-        total_draws += draws
+    # Run initial batch of self-play
+    play_batch(num_games)
 
-    for p in procs:
-        p.join()
+    # Keep playing until all outcome types are present
+    while white_wins == 0 or black_wins == 0 or draws == 0:
+        play_batch(num_cpus)  # play smaller batches (1 per CPU)
 
-    buffer.add(all_samples)
-    print(f"[Parallel Self-Play] Completed. White: {total_white}, Black: {total_black}, Draws: {total_draws}")
+    print(f"[Self-Play Complete] Total Games: {total_games_played} | White Wins: {white_wins}, Black Wins: {black_wins}, Draws: {draws}")
+    log_self_play_results(white_wins, black_wins, draws, filename="logs/self_play/self_play_results.csv")
+    return white_wins, black_wins, draws

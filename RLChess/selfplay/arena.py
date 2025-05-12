@@ -2,9 +2,10 @@
 import numpy as np
 import chess
 import chess.engine
+from utils.logging import log_arena_results
 
-# STOCKFISH_PATH = r"C:\\Users\\timcw\\Downloads\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe"
-STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
+STOCKFISH_PATH = r"C:\\Users\\timcw\\Downloads\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe"
+# STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
 
 def evaluate_new_model(game, model, best_model, cfg):
     import collections
@@ -142,4 +143,18 @@ def evaluate_new_model(game, model, best_model, cfg):
     print(f"New Model — White Wins: {new_white_wins}, Black Wins: {new_black_wins}")
     print(f"Best Model — White Wins: {best_white_wins}, Black Wins: {best_black_wins}\n")
 
+    log_arena_results(
+        new_wins=new_wins,
+        best_wins=best_wins,
+        draws=draws,
+        tiebreak_new_better=tiebreak_new_better,
+        total_new_cp_loss=total_new_cp_loss,
+        total_best_cp_loss=total_best_cp_loss,
+        total_top_choices=total_top_choices,
+        top_match_counts=top_match_counts,
+        new_white_wins=new_white_wins,
+        new_black_wins=new_black_wins,
+        best_white_wins=best_white_wins,
+        best_black_wins=best_black_wins
+    )
     return new_wins, best_wins, draws, tiebreak_new_better, total_new_cp_loss, total_best_cp_loss, top_match_counts
