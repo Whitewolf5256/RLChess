@@ -42,7 +42,7 @@ def self_play_gpu_single_process(nnet, buffer):
 
         print(f"[Progress] Added Samples - Win: {added_win}, Lose: {added_lose}, Tie: {added_draw}")
 
-        if added_win >= 5 and added_lose >= 5 and added_draw >= 5:
+        if added_win >= 500 and added_lose >= 500 and added_draw >= 500:
             print(f"[INFO] Stopping criteria met.")
             break
 
