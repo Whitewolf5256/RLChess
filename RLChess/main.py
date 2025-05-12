@@ -38,8 +38,14 @@ if __name__ == "__main__":
     nnet = ChessNet().to(device)
     optimizer = get_optimizer(nnet)
 
-    # 3) Create replay buffer
-    replay_buffer = ReplayBuffer(lr_cfg.mem_buffer_size)
+    # 3) Create or load replay buffer
+    replay_buffer_path = "./replay_buffer.pkl"
+    if os.path.exists(replay_buffer_path):
+        print(f"[Startup] Loading replay buffer from {replay_buffer_path}")
+        replay_buffer = ReplayBuffer.load(replay_buffer_path)
+    else:
+        print("[Startup] No replay buffer found, creating new buffer.")
+        replay_buffer = ReplayBuffer(lr_cfg.mem_buffer_size)
 
     # 4) Try loading existing global best model
     best_model = ChessNet().to(device)

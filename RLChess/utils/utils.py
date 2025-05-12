@@ -1,4 +1,5 @@
-﻿import random
+﻿import pickle
+import random
 import numpy as np
 
 def apply_symmetries(states, pis, vs):
@@ -8,21 +9,22 @@ class ReplayBuffer:
     def __init__(self, size):
         self.size = size
         self.max_per_category = size // 3
-        self.white_wins = []
-        self.black_wins = []
-        self.draws = []
+        self.win = []    # stores samples where z == +1
+        self.lose = []   # stores samples where z == -1
+        self.tie = []    # stores samples where z == 0
 
     def add(self, samples):
         if not samples:
             return
-        outcome = samples[0][2]  # z value: +1 = white win, -1 = black win, 0 = draw
-
-        if outcome == 1:
-            self._add_category(self.white_wins, samples)
-        elif outcome == -1:
-            self._add_category(self.black_wins, samples)
-        else:
-            self._add_category(self.draws, samples)
+        # Split samples by their value (z)
+        for sample in samples:
+            outcome = sample[2]
+            if outcome == 1:
+                self._add_category(self.win, [sample])
+            elif outcome == -1:
+                self._add_category(self.lose, [sample])
+            else:
+                self._add_category(self.tie, [sample])
 
     def _add_category(self, buffer_list, samples):
         buffer_list.extend(samples)
@@ -34,14 +36,29 @@ class ReplayBuffer:
         per_class = batch_size // 3
 
         # Determine how much we *can* sample per class
-        actual_per_class = min(len(self.white_wins), len(self.black_wins), len(self.draws), per_class)
+        print(f"[Buffer Sampling] win: {len(self.win)}, lose: {len(self.lose)}, tie: {len(self.tie)}")
 
-        white = random.sample(self.white_wins, actual_per_class)
-        black = random.sample(self.black_wins, actual_per_class)
-        draw = random.sample(self.draws, actual_per_class)
+        actual_per_class = min(len(self.win), len(self.lose), len(self.tie), per_class)
 
-        print(f"[Buffer Sampling] white: {len(white)}, black: {len(black)}, draws: {len(draw)}")
-        return white + black + draw
+        win_samples = random.sample(self.win, actual_per_class)
+        lose_samples = random.sample(self.lose, actual_per_class)
+        tie_samples = random.sample(self.tie, actual_per_class)
+
+        print(f"[Buffer Sampling] win: {len(win_samples)}, lose: {len(lose_samples)}, tie: {len(tie_samples)}")
+        return win_samples + lose_samples + tie_samples
 
     def __len__(self):
-        return len(self.white_wins) + len(self.black_wins) + len(self.draws)
+        return len(self.win) + len(self.lose) + len(self.tie)
+
+    def __iter__(self):
+        # Allows iteration over all samples in the buffer
+        return iter(self.win + self.lose + self.tie)
+    
+    def save(self, filename):
+        with open(filename, 'wb') as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def load(filename):
+        with open(filename, 'rb') as f:
+            return pickle.load(f)

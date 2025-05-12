@@ -12,7 +12,7 @@ import torch
 def run_self_play_game(nnet, cfg, game_num):
     game = ChessGame()
     board = game.reset()
-    mcts = MCTS(game, nnet, cfg)  # Reuse across the game
+    mcts = MCTS(game, nnet, cfg)
     mcts.root_state = board
     data = []
 
@@ -34,7 +34,7 @@ def run_self_play_game(nnet, cfg, game_num):
             if t >= cfg.temperature_cutoff:
                 temp = 0
 
-            pi = mcts.get_action_probs(state, temp, selfplay=True)
+            pi = mcts.get_action_probs(board, temp, selfplay=True)
             s = pi.sum()
             if s <= 0 or np.isnan(s):
                 print(f"[WARN] Bad pi vector at step {t} in game {game_num}, fixing...")
@@ -49,19 +49,20 @@ def run_self_play_game(nnet, cfg, game_num):
 
             action = np.random.choice(len(pi), p=pi)
 
-        # Flip board and value if black
-        flipped = (board.turn == chess.BLACK)
-        state = board.mirror() if flipped else board
+        # Save the player who is about to move (before the move)
+        current_player = board.turn  # True for White, False for Black
+
+        # Encode state before the move
         state_tensor = torch.tensor(
-            game.encode_board(state),
+            game.encode_board(board),
             dtype=torch.float32,
             device=cfg.device
         )
-        is_white = not flipped
-        data.append((state_tensor, pi, flipped, is_white))
+        data.append((state_tensor, pi, current_player))
 
+        # Make the move
         board = game.get_next_state(board, action)
-        mcts.update_root(action)  # Reuse tree info
+        mcts.update_root(action)
 
         z = game.get_game_ended(board)
         if z != 0:
@@ -70,72 +71,96 @@ def run_self_play_game(nnet, cfg, game_num):
 
     if z == 0:
         print(f"[INFO] Game {game_num} ended by tie.")
-        z = 0
 
-    # Always from current player's perspective: flip z if move was made by black
+    # Assign value for each sample: +1 if player who made the move eventually won, -1 if lost, 0 if draw.
     samples = []
-    for i, (s_tensor, p, flipped, is_white) in enumerate(data):
+    for i, (s_tensor, p, player) in enumerate(data):
+        # z: 1 if white won, -1 if black won, 0 if draw.
+        if z == 0:
+            value = 0
+        elif (player and z == 1) or (not player and z == -1):
+            value = 1
+        else:
+            value = -1
         t_rem = len(data) - i
-        z_final = -z if flipped else z
-        samples.append((s_tensor, p, z_final, t_rem, is_white))
+        samples.append((s_tensor, p, value, t_rem))
 
-    return samples, int(z == 1), int(z == -1), int(z == 0)
+    # For statistics: count wins/losses/draws from the game outcome
+    if z == 1:
+        win, lose, draw = 1, 0, 0
+    elif z == -1:
+        win, lose, draw = 0, 1, 0
+    else:
+        win, lose, draw = 0, 0, 1
+
+    return samples, win, lose, draw
 
 def _worker(args):
     nnet, cfg, game_num = args
     return run_self_play_game(nnet, cfg, game_num)
 
-
 def parallel_self_play(nnet, buffer):
     """
     Launch parallel self-play using multiprocessing.
-    Saves (state_tensor, pi, z, t_rem, is_white) to buffer.
-    Returns (white_win_count, black_win_count, draw_count)
+    Saves (state_tensor, pi, value, t_rem) to buffer.
+    Returns (win_count, lose_count, draw_count)
     """
     cfg = SelfPlayParams()
     num_games = cfg.num_selfplay_games
     nnet.to("cpu")
 
-    # Detect the operating system (macOS or Windows)
     system = platform.system()
-
-    if system == "Windows":
-        num_cpus = os.cpu_count()  # Windows should be fine with this as it uses fork
-    elif system == "Darwin":  # macOS
-        num_cpus = os.cpu_count()  # This should be 8 for MacBook M1, but we can set a custom value if needed.
-    else:
-        num_cpus = os.cpu_count()
-
-    # Adjust the number of processes (ensure it's an integer)
-    num_cpus = int(min(num_cpus / 5 , num_games))  # Ensure num_cpus is an integer
+    num_cpus = os.cpu_count()
+    num_cpus = int(min(num_cpus / 2, num_games))
 
     print(f"[INFO] Using {num_cpus} CPUs for parallel self-play.")
 
-    white_wins, black_wins, draws = 0, 0, 0
+    win_count, lose_count, draw_count = 0, 0, 0
+    added_win, added_lose, added_draw = 0, 0, 0
     total_games_played = 0
 
     def play_batch(batch_size):
-        nonlocal white_wins, black_wins, draws, total_games_played
+        batch_win, batch_lose, batch_draw = 0, 0, 0
         print(f"[INFO] Launching {batch_size} self-play games using {num_cpus} processes...")
         with mp.Pool(processes=num_cpus) as pool:
             results = pool.map(_worker, [(nnet, cfg, i) for i in range(batch_size)])
 
-        # Unpacking 4 values: (samples, white_wins, black_wins, draws)
-        for samples, white_w, black_w, draw in results:
+        for samples, win, lose, draw in results:
             if samples:
                 buffer.add(samples)
-            white_wins += white_w
-            black_wins += black_w
-            draws += draw
-        total_games_played += batch_size
+            batch_win += win
+            batch_lose += lose
+            batch_draw += draw
+        return batch_win, batch_lose, batch_draw
 
-    # Run initial batch of self-play
-    play_batch(num_games)
+    # Record starting sizes
+    start_win = len(buffer.win)
+    start_lose = len(buffer.lose)
+    start_draw = len(buffer.tie)
 
-    # Keep playing until all outcome types are present
-    while white_wins == 0 or black_wins == 0 or draws == 0:
-        play_batch(num_cpus)  # play smaller batches (1 per CPU)
+    while True:
+        batch_win, batch_lose, batch_draw = play_batch(num_cpus)
+        win_count += batch_win
+        lose_count += batch_lose
+        draw_count += batch_draw
+        total_games_played += num_cpus
 
-    print(f"[Self-Play Complete] Total Games: {total_games_played} | White Wins: {white_wins}, Black Wins: {black_wins}, Draws: {draws}")
-    log_self_play_results(white_wins, black_wins, draws, filename="logs/self_play/self_play_results.csv")
-    return white_wins, black_wins, draws
+        buffer.save('./replay_buffer.pkl')
+
+        print(f"[Batch Status] Added: Win: {batch_win}, Lose: {batch_lose}, Tie: {batch_draw}")
+        print(f"[Buffer Status] win: {len(buffer.win)}, lose: {len(buffer.lose)}, tie: {len(buffer.tie)}")
+
+        # Check how many new samples of each type have been added since loop start
+        new_win = len(buffer.win) - start_win
+        new_lose = len(buffer.lose) - start_lose
+        new_draw = len(buffer.tie) - start_draw
+
+        print(f"[Run Status] Added since start: Win: {new_win}, Lose: {new_lose}, Tie: {new_draw}")
+
+        if new_win >= 500 and new_lose >= 500 and new_draw >= 500:
+            break
+
+
+    print(f"[Self-Play Complete] Total Games: {total_games_played} | White Wins: {win_count}, Black Win: {lose_count}, Draws: {draw_count}")
+    log_self_play_results(win_count, lose_count, draw_count, filename="logs/self_play/self_play_results.csv")
+    return win_count, lose_count, draw_count

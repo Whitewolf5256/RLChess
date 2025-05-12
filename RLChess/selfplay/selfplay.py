@@ -9,7 +9,7 @@ from utils.logging import log_self_play_results
 
 def self_play(nnet, buffer):
     """
-    Run a batch of self-play games, store (state_tensor, pi, z, t_rem, is_white) in buffer,
+    Run a batch of self-play games, store (state_tensor, pi, z, t_rem) in buffer,
     and print per-game and aggregate stats.
     Returns (white_wins, black_wins, draws).
     """

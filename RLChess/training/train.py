@@ -35,14 +35,8 @@ def train(model, buffer, optimizer, cfg):
         else:
             batch = raw_batch
 
-        # Unpack 5-tuple: state, pi, z, t_rem, is_white
-        states, pis, zs, ts, is_white = zip(*batch)
-
-        # Debug info
-        # white_win_count = sum(1 for z, is_w in zip(zs, is_white) if (z == 1 and is_w) or (z == -1 and not is_w))
-        # black_win_count = sum(1 for z, is_w in zip(zs, is_white) if (z == 1 and not is_w) or (z == -1 and is_w))
-        # tie_count = sum(1 for z in zs if z == 0)
-        # print(f"Batch {i+1}/{n_updates} → {white_win_count}W / {black_win_count}B / {tie_count}D")
+        # Unpack 5-tuple: state, pi, z, t_rem
+        states, pis, zs, ts = zip(*batch)
 
         # Data augmentation (e.g., symmetries)
         if cfg.use_symmetries:
@@ -79,7 +73,7 @@ def train(model, buffer, optimizer, cfg):
 
         if i % 100 == 0 or i == n_updates - 1:
             print(f"[{time.strftime('%H:%M:%S')}] Batch {i+1}/{n_updates} → "
-                  f"Total: {loss.item():.4f}, Policy: {policy_loss:.4f}, Value: {value_loss:.4f}")
+                  f"Total: {loss.item():.4f}, Policy loss: {policy_loss:.4f}, Value loss: {value_loss:.4f}")
 
     avg_loss = total_loss / n_updates
     print(f"[{time.strftime('%H:%M:%S')}] Training complete. AvgLoss = {avg_loss:.4f}")

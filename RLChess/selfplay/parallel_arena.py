@@ -47,6 +47,8 @@ def run_arena_game(args):
 
         if result != 0 or move_count >= 80:
             if result == 0:
+                print(f"[Game {game_index}] Draw. Tiebreak winner: {'New' if new_cp_loss < best_cp_loss else 'Best'} "
+          f"(New CP Loss: {new_cp_loss}, Best CP Loss: {best_cp_loss})")
                 replay_board = chess.Board()
                 for idx, move in enumerate(board.move_stack):
                     info = engine.analyse(replay_board, chess.engine.Limit(depth=12))
@@ -68,7 +70,11 @@ def run_arena_game(args):
                         top_total += 1
 
                     replay_board.push(move)
-
+            elif winner is not None:
+                winner_model = players[winner]
+                winner_name = "New Model" if winner_model == model else "Best Model"
+                color = "White" if (winner == 0 and game_index % 2 == 0) or (winner == 1 and game_index % 2 == 1) else "Black"
+                print(f"[Game {game_index}] {winner_name} won as {color}")
             break
 
         current = 1 - current
@@ -81,14 +87,17 @@ def run_arena_game(args):
     elif result == -1:
         winner = 1
 
+    is_white_new = (game_index % 2 == 0 and players[0] == model) or (game_index % 2 == 1 and players[1] == model)
+    is_black_new = not is_white_new
+
     outcome = {
         "winner": winner,
         "draw": result == 0,
         "game_index": game_index,
-        "new_white_win": winner == 0 and players[0] == model and game_index % 2 == 0,
-        "new_black_win": winner == 0 and players[0] == model and game_index % 2 == 1,
-        "best_white_win": winner == 0 and players[0] == best_model and game_index % 2 == 0,
-        "best_black_win": winner == 0 and players[0] == best_model and game_index % 2 == 1,
+        "new_white_win": winner == 0 and is_white_new,
+        "new_black_win": winner == 0 and is_black_new,
+        "best_white_win": winner == 0 and not is_white_new,
+        "best_black_win": winner == 0 and not is_black_new,
         "tiebreak_new_better": new_cp_loss < best_cp_loss if result == 0 else False,
         "new_cp_loss": new_cp_loss,
         "best_cp_loss": best_cp_loss,
