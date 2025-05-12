@@ -2,7 +2,7 @@
 import numpy as np
 import torch
 
-# ✅ Enable cuDNN benchmarking (optional, speeds up conv layers if input shapes are static)
+# ✅ Enable cuDNN benchmarking
 torch.backends.cudnn.benchmark = True
 
 class MCTS:
@@ -10,13 +10,13 @@ class MCTS:
         self.game = game
         self.nnet = nnet
         self.cfg = cfg
-        self.Qsa = {}   # Q values for (s,a)
-        self.Nsa = {}   # visit count for (s,a)
-        self.Ns  = {}   # visit count for s
-        self.Ps  = {}   # initial policy returned by neural net for s
+        self.Qsa = {}  # Q values for (s,a)
+        self.Nsa = {}  # visit count for (s,a)
+        self.Ns = {}   # visit count for s
+        self.Ps = {}   # initial policy returned by neural net for s
         self.root_state = None
 
-    def search(self, state):
+    def search(self, state, is_root=False):
         if state.is_game_over():
             z = self.game.get_game_ended(state)
             return -z
@@ -24,18 +24,16 @@ class MCTS:
         s = self.game.string_representation(state)
 
         if s not in self.Ps:
-            # ✅ Push to GPU once here
             board_np = self.game.encode_board(state)
             board_t = torch.tensor(board_np, dtype=torch.float32, device=self.cfg.device).unsqueeze(0)
 
-            # ✅ Batched inference for a single input
             with torch.no_grad():
                 policy_logits, value = self.nnet(board_t)
 
-            policy = policy_logits[0].softmax(dim=0)  # already on GPU
+            policy = policy_logits[0].softmax(dim=0)
             valid = torch.tensor(self.game.get_valid_moves(state), device=self.cfg.device, dtype=torch.float32)
 
-            policy = policy * valid  # ✅ Remain on GPU
+            policy = policy * valid
 
             total_policy = policy.sum()
             total_valid = valid.sum()
@@ -47,7 +45,13 @@ class MCTS:
             else:
                 policy = torch.ones_like(valid) / len(valid)
 
-            # ✅ Store policy on CPU (we assume large dict storage best kept off GPU)
+            # ✅ Add Dirichlet noise at root
+            if is_root and self.cfg.add_dirichlet_noise:
+                alpha = self.cfg.dirichlet_alpha
+                epsilon = self.cfg.dirichlet_epsilon
+                noise = torch.from_numpy(np.random.dirichlet([alpha] * len(valid))).to(self.cfg.device)
+                policy = (1 - epsilon) * policy + epsilon * noise
+
             self.Ps[s] = policy.cpu().numpy()
             self.Ns[s] = 0
             return -value.item()
@@ -83,8 +87,8 @@ class MCTS:
         if self.root_state is None:
             self.root_state = state
 
-        for _ in range(self.cfg.num_mcts_sims):
-            self.search(state)
+        for i in range(self.cfg.num_mcts_sims):
+            self.search(state, is_root=(i == 0))
 
         s = self.game.string_representation(state)
         valid = self.game.get_valid_moves(state)
@@ -117,6 +121,4 @@ class MCTS:
     def update_root(self, action):
         if self.root_state is None:
             return
-
-        next_state = self.game.get_next_state(self.root_state, action)
-        self.root_state = next_state
+        self.root_state = self.game.get_next_state(self.root_state, action)

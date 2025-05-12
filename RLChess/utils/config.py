@@ -11,12 +11,14 @@ class SelfPlayParams:
         self.temperature_cutoff = 20
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.max_game_length = 80
-
+        self.add_dirichlet_noise = True
+        self.dirichlet_alpha = 0.3      # AlphaZero used 0.3 for chess
+        self.dirichlet_epsilon = 0.25 
 class LearningParams:
     def __init__(self):
         self.use_symmetries = True
         self.mem_buffer_size = 30000          # How many past games to remember
-        self.batch_size = 300                 # Training batch size
+        self.batch_size = 256                 # Training batch size
         self.loss_comp_batch_size = 256       # Optional: smaller for memory
         self.num_checkpoints = 10
         self.max_batches_per_checkpoint = 1000

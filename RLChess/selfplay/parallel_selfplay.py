@@ -106,7 +106,7 @@ def parallel_self_play(nnet, buffer):
         num_cpus = os.cpu_count()
 
     # Adjust the number of processes (ensure it's an integer)
-    num_cpus = int(min(num_cpus / 2, num_games))  # Ensure num_cpus is an integer
+    num_cpus = int(min(num_cpus / 2 , num_games))  # Ensure num_cpus is an integer
 
     print(f"[INFO] Using {num_cpus} CPUs for parallel self-play.")
 
