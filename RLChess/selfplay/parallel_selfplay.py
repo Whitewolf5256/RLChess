@@ -11,7 +11,7 @@ import platform
 def run_self_play_game(nnet, cfg, game_num):
     game = ChessGame()
     board = game.reset()
-    mcts = MCTS(game, nnet, cfg)
+    mcts = MCTS(game, nnet, cfg)  # Reuse across the game
     mcts.root_state = board
     data = []
 
@@ -34,7 +34,6 @@ def run_self_play_game(nnet, cfg, game_num):
                 temp = 0
 
             pi = mcts.get_action_probs(board, temp)
-
             s = pi.sum()
             if s <= 0 or np.isnan(s):
                 print(f"[WARN] Bad pi vector at step {t} in game {game_num}, fixing...")
@@ -49,6 +48,7 @@ def run_self_play_game(nnet, cfg, game_num):
 
             action = np.random.choice(len(pi), p=pi)
 
+        # Flip board and value if black
         flipped = (board.turn == chess.BLACK)
         state = board.mirror() if flipped else board
         state_tensor = game.encode_board(state)
@@ -56,7 +56,7 @@ def run_self_play_game(nnet, cfg, game_num):
         data.append((state_tensor, pi, flipped, is_white))
 
         board = game.get_next_state(board, action)
-        mcts.update_root(action)
+        mcts.update_root(action)  # Reuse tree info
 
         z = game.get_game_ended(board)
         if z != 0:
@@ -67,6 +67,7 @@ def run_self_play_game(nnet, cfg, game_num):
         print(f"[INFO] Game {game_num} ended by tie.")
         z = 0
 
+    # Always from current player's perspective: flip z if move was made by black
     samples = []
     for i, (s_tensor, p, flipped, is_white) in enumerate(data):
         t_rem = len(data) - i

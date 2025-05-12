@@ -7,6 +7,7 @@ import time
 import torch
 import matplotlib.pyplot as plt
 import multiprocessing as mp
+import platform
 
 from model.model import ChessNet
 from training.optimiser import get_optimizer
@@ -22,7 +23,10 @@ if __name__ == "__main__":
     mp.set_start_method('spawn')
     
     torch.backends.cudnn.benchmark = True
-    torch.cuda.set_per_process_memory_fraction(0.5)
+    if os.system == "Windows" and torch.cuda.is_available():
+        torch.cuda.set_per_process_memory_fraction(0.5)
+    elif os.system == "Darwin":  # macOS
+        print("CUDA not supported on macOS. Skipping CUDA memory config.")
 
     # 1) Load configs
     sp_cfg = SelfPlayParams()
