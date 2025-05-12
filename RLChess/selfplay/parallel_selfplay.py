@@ -5,8 +5,10 @@ from mcts.mcts import MCTS
 from chess_env.chess_game import ChessGame
 from utils.config import SelfPlayParams
 from utils.logging import log_self_play_results
+import os
+import platform
 
-def run_self_play_game(nnet, cfg):
+def run_self_play_game(nnet, cfg, game_num):
     game = ChessGame()
     board = game.reset()
     mcts = MCTS(game, nnet, cfg)
@@ -21,7 +23,7 @@ def run_self_play_game(nnet, cfg):
             move = board.parse_uci("d2d4")
             action = game.move_to_index.get(move)
             if action is None or valid[action] == 0:
-                print("[WARN] Invalid forced opening. Drawing game.")
+                print(f"[WARN] Invalid forced opening in game {game_num}. Drawing game.")
                 return [], 0, 0, 1
             pi[action] = 1.0
         else:
@@ -35,7 +37,7 @@ def run_self_play_game(nnet, cfg):
 
             s = pi.sum()
             if s <= 0 or np.isnan(s):
-                print(f"[WARN] Bad pi vector at step {t}, fixing...")
+                print(f"[WARN] Bad pi vector at step {t} in game {game_num}, fixing...")
                 idxs = np.nonzero(valid)[0]
                 if len(idxs):
                     pi = np.zeros_like(pi)
@@ -58,11 +60,11 @@ def run_self_play_game(nnet, cfg):
 
         z = game.get_game_ended(board)
         if z != 0:
-            # print(f"[INFO] Game ended after {t+1} moves. Result: {z}")
+            print(f"[INFO] Game {game_num} ended after {t+1} moves. Result: {z}")
             break
 
     if z == 0:
-        # print("[INFO] Game ended by timeout.")
+        print(f"[INFO] Game {game_num} ended by tie.")
         z = 0
 
     samples = []
@@ -74,8 +76,9 @@ def run_self_play_game(nnet, cfg):
     return samples, int(z == 1), int(z == -1), int(z == 0)
 
 def _worker(args):
-    nnet, cfg = args
-    return run_self_play_game(nnet, cfg)
+    nnet, cfg, game_num = args
+    return run_self_play_game(nnet, cfg, game_num)
+
 
 def parallel_self_play(nnet, buffer):
     """
@@ -85,7 +88,21 @@ def parallel_self_play(nnet, buffer):
     """
     cfg = SelfPlayParams()
     num_games = cfg.num_selfplay_games
-    num_cpus = min(4, mp.cpu_count(), num_games)  # ✨ limit to 4 CPUs max
+
+    # Detect the operating system (macOS or Windows)
+    system = platform.system()
+
+    if system == "Windows":
+        num_cpus = os.cpu_count()  # Windows should be fine with this as it uses fork
+    elif system == "Darwin":  # macOS
+        num_cpus = os.cpu_count()  # This should be 8 for MacBook M1, but we can set a custom value if needed.
+    else:
+        num_cpus = os.cpu_count()
+
+    # Adjust the number of processes (ensure it's an integer)
+    num_cpus = int(min(num_cpus / 5, num_games))  # Ensure num_cpus is an integer
+
+    print(f"[INFO] Using {num_cpus} CPUs for parallel self-play.")
 
     white_wins, black_wins, draws = 0, 0, 0
     total_games_played = 0
@@ -94,14 +111,15 @@ def parallel_self_play(nnet, buffer):
         nonlocal white_wins, black_wins, draws, total_games_played
         print(f"[INFO] Launching {batch_size} self-play games using {num_cpus} processes...")
         with mp.Pool(processes=num_cpus) as pool:
-            results = pool.map(_worker, [(nnet, cfg)] * batch_size)
+            results = pool.map(_worker, [(nnet, cfg, i) for i in range(batch_size)])
 
-        for samples, w, b, d in results:
+        # Unpacking 4 values: (samples, white_wins, black_wins, draws)
+        for samples, white_w, black_w, draw in results:
             if samples:
                 buffer.add(samples)
-            white_wins += w
-            black_wins += b
-            draws += d
+            white_wins += white_w
+            black_wins += black_w
+            draws += draw
         total_games_played += batch_size
 
     # Run initial batch of self-play
