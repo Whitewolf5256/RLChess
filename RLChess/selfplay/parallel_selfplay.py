@@ -34,7 +34,7 @@ def run_self_play_game(nnet, cfg, game_num):
             if t >= cfg.temperature_cutoff:
                 temp = 0
 
-            pi = mcts.get_action_probs(board, temp)
+            pi = mcts.get_action_probs(state, temp, selfplay=True)
             s = pi.sum()
             if s <= 0 or np.isnan(s):
                 print(f"[WARN] Bad pi vector at step {t} in game {game_num}, fixing...")
@@ -94,6 +94,7 @@ def parallel_self_play(nnet, buffer):
     """
     cfg = SelfPlayParams()
     num_games = cfg.num_selfplay_games
+    nnet.to("cpu")
 
     # Detect the operating system (macOS or Windows)
     system = platform.system()
@@ -106,7 +107,7 @@ def parallel_self_play(nnet, buffer):
         num_cpus = os.cpu_count()
 
     # Adjust the number of processes (ensure it's an integer)
-    num_cpus = int(min(num_cpus / 2 , num_games))  # Ensure num_cpus is an integer
+    num_cpus = int(min(num_cpus / 5 , num_games))  # Ensure num_cpus is an integer
 
     print(f"[INFO] Using {num_cpus} CPUs for parallel self-play.")
 

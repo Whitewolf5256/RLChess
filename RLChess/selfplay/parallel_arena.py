@@ -5,8 +5,8 @@ import chess.engine
 from mcts.mcts import MCTS
 from utils.logging import log_arena_results
 
-#STOCKFISH_PATH = r"C:\Users\timcw\Downloads\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
-STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
+STOCKFISH_PATH = r"C:\Users\timcw\Downloads\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
+#STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
 
 def run_arena_game(args):
     game, model, best_model, cfg, game_index = args
@@ -32,7 +32,7 @@ def run_arena_game(args):
     top_total = 0
 
     while True:
-        pi = mcts_players[current].get_action_probs(state, temp=0)
+        pi = mcts_players[current].get_action_probs(state, temp=0, selfplay=False)
         action = np.argmax(pi)
         move = game.index_to_move[action]
 
@@ -104,6 +104,9 @@ def parallel_arena(game, model, best_model, cfg):
     num_games = cfg.num_games
     num_cpus = min(4, mp.cpu_count(), num_games)
     print(f"[INFO] Running {num_games} arena games using {num_cpus} CPUs...")
+    
+    model.to("cpu")
+    best_model.to("cpu")
 
     args = [(game, model, best_model, cfg, i) for i in range(num_games)]
 

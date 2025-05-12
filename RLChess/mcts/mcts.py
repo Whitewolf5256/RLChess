@@ -83,12 +83,12 @@ class MCTS:
         self.Ns[s] += 1
         return -v
 
-    def get_action_probs(self, state, temp=1):
+    def get_action_probs(self, state, temp=1, selfplay=False):
         if self.root_state is None:
             self.root_state = state
 
         for i in range(self.cfg.num_mcts_sims):
-            self.search(state, is_root=(i == 0))
+            self.search(state, is_root=(i == 0 and selfplay))
 
         s = self.game.string_representation(state)
         valid = self.game.get_valid_moves(state)

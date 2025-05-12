@@ -20,7 +20,7 @@ from chess_env.chess_game import ChessGame
 from selfplay.parallel_selfplay import parallel_self_play
 from selfplay.parallel_arena import parallel_arena
 if __name__ == "__main__":
-    mp.set_start_method('spawn')
+    mp.set_start_method('spawn', force=True)
     
     torch.backends.cudnn.benchmark = True
     if os.system == "Windows" and torch.cuda.is_available():

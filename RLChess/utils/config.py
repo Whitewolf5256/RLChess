@@ -9,7 +9,7 @@ class SelfPlayParams:
         self.exploration_temp = 1.5           # Temperature for move selection
         self.cpuct = 1.5                      # Exploration-exploitation balance
         self.temperature_cutoff = 20
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
         self.max_game_length = 80
         self.add_dirichlet_noise = True
         self.dirichlet_alpha = 0.3      # AlphaZero used 0.3 for chess
@@ -18,15 +18,15 @@ class LearningParams:
     def __init__(self):
         self.use_symmetries = True
         self.mem_buffer_size = 30000          # How many past games to remember
-        self.batch_size = 256                 # Training batch size
-        self.loss_comp_batch_size = 256       # Optional: smaller for memory
+        self.batch_size = 300                 # Training batch size
+        self.loss_comp_batch_size = 300       # Optional: smaller for memory
         self.num_checkpoints = 10
         self.max_batches_per_checkpoint = 1000
         self.min_checkpoints_per_epoch = 5
         self.nonvalidity_penalty = 2.0
         self.l2_regularization = 1e-4
         self.learning_rate = 1e-3             # Slightly more stable learning rate
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = 'cpu'
 
 
 class ArenaParams:
@@ -35,4 +35,4 @@ class ArenaParams:
         self.replace_threshold = 0.55         # % new model must win to replace old
         self.num_mcts_sims = 100              # Match self-play value
         self.cpuct = 1.5                   # Match self-play value
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"

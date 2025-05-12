@@ -49,8 +49,8 @@ def self_play(nnet, buffer):
                     temp *= 1.5
                 elif t >= cfg.temperature_cutoff:
                     temp = 0
-
-                pi = mcts.get_action_probs(board, temp)
+                    
+                pi = mcts.get_action_probs(state, temp, selfplay=True)
                 s = pi.sum()
                 if s <= 0 or np.isnan(s):
                     idxs = np.nonzero(valid)[0]
