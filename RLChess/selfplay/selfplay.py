@@ -18,8 +18,13 @@ def self_play(nnet, buffer):
 
     device = cfg.device
     white_wins, black_wins, draws = 0, 0, 0
+    total_games = 0
 
-    for g in range(cfg.num_selfplay_games):
+    def outcomes_met():
+        return white_wins > 0 and black_wins > 0 and draws > 0
+
+    while total_games < cfg.num_selfplay_games or not outcomes_met():
+    # for g in range(cfg.num_selfplay_games):
         board = game.reset()
         mcts = MCTS(game, nnet, cfg)
         mcts.root_state = board
@@ -35,7 +40,7 @@ def self_play(nnet, buffer):
                 move = chess.Move.from_uci("d2d4")
                 action = game.move_to_index.get(move)
                 if action is None or valid[action] == 0:
-                    print(f"[Self-Play] Game {g}: forced d2d4 illegal, skipping")
+                    print(f"[Self-Play] Game {total_games}: forced d2d4 illegal, skipping")
                     break
                 pi[action] = 1.0
             else:
@@ -81,13 +86,13 @@ def self_play(nnet, buffer):
                     black_wins += 1
                 else:
                     draws += 1
-                print(f"[Self-Play] Game {g} ended: {'White' if z==1 else 'Black' if z==-1 else 'Draw'} (z={z}) in {t+1} plies")
+                print(f"[Self-Play] Game {total_games} ended: {'White' if z==1 else 'Black' if z==-1 else 'Draw'} (z={z}) in {t+1} plies")
                 print(f"[Self-Play] Cumulative → White:{white_wins}, Black:{black_wins}, Draw:{draws}")
                 break
 
         if z == 0:
             draws += 1
-            print(f"[Self-Play] Game {g} reached max plies. Declaring draw.")
+            print(f"[Self-Play] Game {total_games} reached max plies. Declaring draw.")
             print(f"[Self-Play] Cumulative → White:{white_wins}, Black:{black_wins}, Draw:{draws}")
 
         # ✅ Add both sides of data with correct reward + time-to-end
@@ -98,6 +103,7 @@ def self_play(nnet, buffer):
             samples.append((s_tensor, torch.tensor(p, dtype=torch.float32, device=device), z_final, t_rem, is_white))
 
         buffer.add(samples)
+        total_games += 1
 
     print(f"[Self-Play Summary] White: {white_wins}, Black: {black_wins}, Draws: {draws}")
     log_self_play_results(white_wins, black_wins, draws)

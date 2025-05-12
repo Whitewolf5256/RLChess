@@ -7,6 +7,7 @@ from utils.config import SelfPlayParams
 from utils.logging import log_self_play_results
 import os
 import platform
+import torch
 
 def run_self_play_game(nnet, cfg, game_num):
     game = ChessGame()
@@ -51,7 +52,11 @@ def run_self_play_game(nnet, cfg, game_num):
         # Flip board and value if black
         flipped = (board.turn == chess.BLACK)
         state = board.mirror() if flipped else board
-        state_tensor = game.encode_board(state)
+        state_tensor = torch.tensor(
+            game.encode_board(state),
+            dtype=torch.float32,
+            device=cfg.device
+        )
         is_white = not flipped
         data.append((state_tensor, pi, flipped, is_white))
 
@@ -101,7 +106,7 @@ def parallel_self_play(nnet, buffer):
         num_cpus = os.cpu_count()
 
     # Adjust the number of processes (ensure it's an integer)
-    num_cpus = int(min(num_cpus / 5, num_games))  # Ensure num_cpus is an integer
+    num_cpus = int(min(num_cpus / 2, num_games))  # Ensure num_cpus is an integer
 
     print(f"[INFO] Using {num_cpus} CPUs for parallel self-play.")
 

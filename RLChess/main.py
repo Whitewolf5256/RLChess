@@ -94,19 +94,13 @@ if __name__ == "__main__":
             # evaluate new candidate vs best
             model = ChessNet().to(device)
             model.load_state_dict(nnet.state_dict())
-            # game = ChessGame()
-            # (
-            #     new_wins, best_wins, draws,
-            #     tiebreak_new_better,
-            #     total_new_cp_loss, total_best_cp_loss,
-            #     top_match_counts
-            # ) = evaluate_new_model(game, model, best_model, arena_cfg)
             game = ChessGame()
             (
                 new_wins, best_wins, draws,
                 tiebreak_new_better,
                 total_new_cp_loss, total_best_cp_loss,
                 top_match_counts
+            #) = evaluate_new_model(game, model, best_model, arena_cfg)
             ) = parallel_arena(game, model, best_model, arena_cfg)
 
             winrate = new_wins / max((new_wins + best_wins), 1)
