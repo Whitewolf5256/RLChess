@@ -37,8 +37,8 @@ def train(model, buffer, optimizer, cfg):
         else:
             batch = raw_batch
 
-        # Unpack 5-tuple: state, pi, z, t_rem
-        states, pis, zs, ts = zip(*batch)
+        # Unpack 5-tuple: state, pi, z
+        states, pis, zs = zip(*batch)
 
         # Data augmentation (e.g., symmetries)
         if cfg.use_symmetries:
