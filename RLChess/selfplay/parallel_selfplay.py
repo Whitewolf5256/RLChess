@@ -66,9 +66,8 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
                 print(f"  valid: {valid}")
                 print(f"  num valid moves: {np.sum(valid)}")
                 print(f"  board FEN: {board.fen()}")
-                # If you want to see the legal moves in UCI:
-                import chess
                 legal_moves = [move.uci() for move in board.legal_moves]
+                print(f"  legal moves: {legal_moves}")
                 print(f"  legal moves: {legal_moves}")
                 # Optionally, print the state tensor shape/type:
                 # print(f"  state_tensor shape: {state_tensor.shape}, dtype: {state_tensor.dtype}")
