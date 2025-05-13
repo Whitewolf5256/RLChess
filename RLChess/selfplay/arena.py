@@ -77,7 +77,7 @@ def evaluate_new_model(game, model, best_model, cfg):
             result = game.get_game_ended(state)
             move_count += 1
 
-            if result != 0 or move_count >= 80:
+            if result != 0 or move_count >= 150:
                 if result == 0:
                     draws += 1
                     # Stockfish analysis for tiebreak

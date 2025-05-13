@@ -51,7 +51,7 @@ def run_arena_game(args):
         result = game.get_game_ended(state)
         move_count += 1
 
-        if result != 0 or move_count >= 80:
+        if result != 0 or move_count >= 150:
             if result == 0:
                 print(f"[Game {game_index}] Draw. Tiebreak winner: {'New' if new_cp_loss < best_cp_loss else 'Best'} "
           f"(New CP Loss: {new_cp_loss}, Best CP Loss: {best_cp_loss})")

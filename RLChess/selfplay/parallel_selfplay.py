@@ -105,7 +105,7 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
         else:
             value = -1
         t_rem = len(data) - i
-        samples.append((s_tensor, p, value, t_rem))
+        samples.append((s_tensor, p, value))
 
     if z == 1:
         win, lose, draw = 1, 0, 0
