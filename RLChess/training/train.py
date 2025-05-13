@@ -15,8 +15,8 @@ def train(model, buffer, optimizer, cfg):
 
     # Compute number of batches to run
     ntotal = len(buffer) // cfg.batch_size
-    n_updates = min(cfg.max_batches_per_checkpoint,
-                    ntotal // cfg.min_checkpoints_per_epoch)
+    n_updates = ntotal
+
     if n_updates == 0:
         print("[Training] Not enough samples for training.")
         return 0.0
