@@ -4,11 +4,17 @@ import os
 import numpy as np
 import chess
 import chess.engine
+import platform
+
 from mcts.mcts import MCTS
 from utils.logging import log_arena_results
 
-STOCKFISH_PATH = r"C:\Users\timcw\Downloads\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
-#STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
+if platform.system() == "Windows":
+    STOCKFISH_PATH = r"C:\Users\timcw\Downloads\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
+elif platform.system() == "Darwin":
+    STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
+else:
+    raise EnvironmentError("Unsupported OS for Stockfish path auto-detection")
 
 def run_arena_game(args):
     game, model, best_model, cfg, game_index = args
