@@ -4,8 +4,8 @@ import torch
 class SelfPlayParams:
     def __init__(self):
         self.num_iters = 100                  # Total training iterations
-        self.num_selfplay_games = 200          # Self-play games per iteration
-        self.num_mcts_sims = 100              # MCTS sims per move
+        self.num_selfplay_games = 100          # Self-play games per iteration
+        self.num_mcts_sims = 200              # MCTS sims per move
         self.exploration_temp = 2.0           # Temperature for move selection
         self.cpuct = 1.5                      # Exploration-exploitation balance
         self.temperature_cutoff = 20
