@@ -9,16 +9,34 @@ import os
 import platform
 import torch
 
-def run_self_play_game(nnet, cfg, game_num):
+def run_self_play_game(nnet, cfg, game_num, opponent_model=None):
+    """
+    If opponent_model is provided, alternate moves between nnet and opponent_model.
+    Otherwise, use nnet for both sides (standard self-play).
+    """
     game = ChessGame()
     board = game.reset()
-    mcts = MCTS(game, nnet, cfg)
-    mcts.root_state = board
+    mcts_nnet = MCTS(game, nnet, cfg)
+    if opponent_model is not None:
+        mcts_opp = MCTS(game, opponent_model, cfg)
+    else:
+        mcts_opp = mcts_nnet
+    mcts_nnet.root_state = board
+    mcts_opp.root_state = board
     data = []
 
     for t in range(cfg.max_game_length):
         valid = game.get_valid_moves(board)
         pi = np.zeros_like(valid, dtype=np.float32)
+
+        # Decide which model to use for this move
+        if opponent_model is not None:
+            # True for white, False for black
+            model_to_use = nnet if board.turn else opponent_model
+            mcts_to_use = mcts_nnet if board.turn else mcts_opp
+        else:
+            model_to_use = nnet
+            mcts_to_use = mcts_nnet
 
         if board.turn == chess.WHITE and t == 0:
             move = board.parse_uci("d2d4")
@@ -34,7 +52,7 @@ def run_self_play_game(nnet, cfg, game_num):
             if t >= cfg.temperature_cutoff:
                 temp = 0
 
-            pi = mcts.get_action_probs(board, temp, selfplay=True)
+            pi = mcts_to_use.get_action_probs(board, temp, selfplay=True)
             s = pi.sum()
             if s <= 0 or np.isnan(s):
                 print(f"[WARN] Bad pi vector at step {t} in game {game_num}, fixing...")
@@ -49,10 +67,8 @@ def run_self_play_game(nnet, cfg, game_num):
 
             action = np.random.choice(len(pi), p=pi)
 
-        # Save the player who is about to move (before the move)
         current_player = board.turn  # True for White, False for Black
 
-        # Encode state before the move
         state_tensor = torch.tensor(
             game.encode_board(board),
             dtype=torch.float32,
@@ -62,7 +78,9 @@ def run_self_play_game(nnet, cfg, game_num):
 
         # Make the move
         board = game.get_next_state(board, action)
-        mcts.update_root(action)
+        mcts_nnet.update_root(action)
+        if opponent_model is not None:
+            mcts_opp.update_root(action)
 
         z = game.get_game_ended(board)
         if z != 0:
@@ -72,10 +90,8 @@ def run_self_play_game(nnet, cfg, game_num):
     if z == 0:
         print(f"[INFO] Game {game_num} ended by tie.")
 
-    # Assign value for each sample: +1 if player who made the move eventually won, -1 if lost, 0 if draw.
     samples = []
     for i, (s_tensor, p, player) in enumerate(data):
-        # z: 1 if white won, -1 if black won, 0 if draw.
         if z == 0:
             value = 0
         elif (player and z == 1) or (not player and z == -1):
@@ -85,7 +101,6 @@ def run_self_play_game(nnet, cfg, game_num):
         t_rem = len(data) - i
         samples.append((s_tensor, p, value, t_rem))
 
-    # For statistics: count wins/losses/draws from the game outcome
     if z == 1:
         win, lose, draw = 1, 0, 0
     elif z == -1:
