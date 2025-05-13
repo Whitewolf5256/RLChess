@@ -1,8 +1,9 @@
-﻿from mcts.mcts import MCTS
+﻿import torch
 import numpy as np
 import chess
 import chess.engine
 import platform
+from mcts.mcts import MCTS
 from utils.logging import log_arena_results
 
 if platform.system() == "Windows":
@@ -13,7 +14,9 @@ else:
     raise EnvironmentError("Unsupported OS for Stockfish path auto-detection")
 
 def evaluate_new_model(game, model, best_model, cfg):
-    import collections
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    best_model.to(device)
 
     new_wins = 0
     best_wins = 0
@@ -35,9 +38,11 @@ def evaluate_new_model(game, model, best_model, cfg):
         state = game.reset()
         players = [model, best_model] if i % 2 == 0 else [best_model, model]
         mcts_players = [MCTS(game, p, cfg) for p in players]
+        # If your MCTS or game uses device, make sure it uses the same device as the model!
+
         board = chess.Board()
 
-        print(f"\n[Arena Game {i+1}] Starting — {'New' if players[0] == model else 'Best'} model is White")
+        print(f"\n[Arena Game {i+1}] Starting - {'New' if players[0] == model else 'Best'} model is White")
 
         # Force 1.d4
         d4_move = chess.Move.from_uci("d2d4")
@@ -46,8 +51,8 @@ def evaluate_new_model(game, model, best_model, cfg):
         board.push(d4_move)
         move_count = 1
         current = 0  # White's turn
+
         model_type = "New" if players[current] == model else "Best"
-        color = "White" if board.turn == chess.WHITE else "Black"
         color = "White" if board.turn == chess.WHITE else "Black"
         print(f"Move {move_count}: {model_type} model ({color}) plays d2d4")
 
@@ -78,7 +83,6 @@ def evaluate_new_model(game, model, best_model, cfg):
                     # Stockfish analysis for tiebreak
                     print("[Tiebreak] Game ended in draw. Running Stockfish analysis...")
                     replay_board = chess.Board()
-                    analysis = []
                     new_cp_loss = 0
                     best_cp_loss = 0
 
@@ -118,7 +122,7 @@ def evaluate_new_model(game, model, best_model, cfg):
                     winning_color = "White" if (i % 2 == 0 and winner == 0) or (i % 2 == 1 and winner == 1) else "Black"
 
                     print(f"[Result] {winning_model} model won as {winning_color}")
-    
+
                     if winning_model == "New":
                         new_wins += 1
                         if winning_color == "White":
@@ -142,11 +146,11 @@ def evaluate_new_model(game, model, best_model, cfg):
     print(f"Best Wins: {best_wins}")
     print(f"Draws: {draws}")
     print(f"Tiebreak Wins (New model better): {tiebreak_new_better}")
-    print(f"Avg CP Loss — New: {total_new_cp_loss / max(draws, 1):.1f}, Best: {total_best_cp_loss / max(draws, 1):.1f}")
-    print(f"Top Stockfish Move Matches — New: {top_match_counts['new']}, Best: {top_match_counts['best']} / {total_top_choices} total")
+    print(f"Avg CP Loss - New: {total_new_cp_loss / max(draws, 1):.1f}, Best: {total_best_cp_loss / max(draws, 1):.1f}")
+    print(f"Top Stockfish Move Matches - New: {top_match_counts['new']}, Best: {top_match_counts['best']} / {total_top_choices} total")
     print(f"--- Win Breakdown by Color ---")
-    print(f"New Model — White Wins: {new_white_wins}, Black Wins: {new_black_wins}")
-    print(f"Best Model — White Wins: {best_white_wins}, Black Wins: {best_black_wins}\n")
+    print(f"New Model - White Wins: {new_white_wins}, Black Wins: {new_black_wins}")
+    print(f"Best Model - White Wins: {best_white_wins}, Black Wins: {best_black_wins}\n")
 
     log_arena_results(
         new_wins=new_wins,

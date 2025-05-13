@@ -21,7 +21,7 @@ def self_play_gpu_single_process(nnet, buffer):
     nnet.to(cfg.device)
     nnet.eval()
 
-    # Opponent pool: list of model snapshots (deepcopy of state_dict)
+    # Opponent pool: list of model weights (state_dicts)
     opponent_pool = [copy.deepcopy(nnet.state_dict())]
 
     win_count, lose_count, draw_count = 0, 0, 0
@@ -35,7 +35,6 @@ def self_play_gpu_single_process(nnet, buffer):
 
         # Select opponent from pool
         if len(opponent_pool) < cfg.opponent_pool_size:
-            # Not enough models yet, use only available
             pool_probs = cfg.opponent_selection_prob[:len(opponent_pool)]
             pool_probs = [p/sum(pool_probs) for p in pool_probs]
         else:
@@ -45,15 +44,12 @@ def self_play_gpu_single_process(nnet, buffer):
         opponent_idx = torch.multinomial(
             torch.tensor(pool_probs), 1
         ).item()
-        # Load opponent weights into a new model instance
-        opponent_model = copy.deepcopy(nnet)
-        opponent_model.load_state_dict(opponent_pool[opponent_idx])
-        opponent_model.to(cfg.device)
-        opponent_model.eval()
+        # Pass opponent weights, not model
+        opponent_weights = opponent_pool[opponent_idx]
 
-        # Self-play: pass both current model and opponent
+        # Self-play: pass both current model and opponent weights
         samples, win, lose, draw = run_self_play_game(
-            nnet, cfg, game_num, opponent_model=opponent_model
+            nnet, cfg, game_num, opponent_weights=opponent_weights
         )
 
         # Count samples before adding to buffer
@@ -88,12 +84,10 @@ def self_play_gpu_single_process(nnet, buffer):
 
         # After each game, update opponent pool (if not freezing, but here we freeze)
         if not cfg.freeze_opponents:
-            # Add latest model to pool, pop oldest if needed
             opponent_pool.append(copy.deepcopy(nnet.state_dict()))
             if len(opponent_pool) > cfg.opponent_pool_size:
                 opponent_pool.pop(0)
         elif len(opponent_pool) < cfg.opponent_pool_size:
-            # Only fill up the pool once, then freeze
             opponent_pool.append(copy.deepcopy(nnet.state_dict()))
 
         game_num += 1

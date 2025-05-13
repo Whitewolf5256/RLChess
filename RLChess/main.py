@@ -77,8 +77,12 @@ if __name__ == "__main__":
 
         # — Self-play phase
         sp_start = time.time()
-        games_played = self_play_gpu_single_process(nnet, replay_buffer)
-        #games_played = parallel_self_play(nnet, replay_buffer)
+        if platform.system() == "Windows":
+            games_played = self_play_gpu_single_process(nnet, replay_buffer)
+        elif platform.system() == "Darwin":
+            games_played = parallel_self_play(nnet, replay_buffer)
+        else:
+            raise EnvironmentError("Unsupported OS for self-play")
         sp_duration = time.time() - sp_start
         print(f"[Iteration {iteration+1}] Self-play: {games_played} games, buffer size={len(replay_buffer)} (took {sp_duration:.1f}s)")
 
@@ -101,13 +105,22 @@ if __name__ == "__main__":
             model = ChessNet().to(device)
             model.load_state_dict(nnet.state_dict())
             game = ChessGame()
-            (
-                new_wins, best_wins, draws,
-                tiebreak_new_better,
-                total_new_cp_loss, total_best_cp_loss,
-                top_match_counts
-            #) = evaluate_new_model(game, model, best_model, arena_cfg)
-            ) = parallel_arena(game, model, best_model, arena_cfg)
+            if platform.system() == "Windows":
+                (
+                    new_wins, best_wins, draws,
+                    tiebreak_new_better,
+                    total_new_cp_loss, total_best_cp_loss,
+                    top_match_counts
+                ) = evaluate_new_model(game, model, best_model, arena_cfg)
+            elif platform.system() == "Darwin":
+                (
+                    new_wins, best_wins, draws,
+                    tiebreak_new_better,
+                    total_new_cp_loss, total_best_cp_loss,
+                    top_match_counts
+                ) = parallel_arena(game, model, best_model, arena_cfg)
+            else:
+                raise EnvironmentError("Unsupported OS for arena evaluation")
 
             winrate = new_wins / max((new_wins + best_wins), 1)
             win_rates.append(winrate)
