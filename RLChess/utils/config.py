@@ -4,16 +4,21 @@ import torch
 class SelfPlayParams:
     def __init__(self):
         self.num_iters = 100                  # Total training iterations
-        self.num_selfplay_games = 100          # Self-play games per iteration
+        self.num_selfplay_games = 200          # Self-play games per iteration
         self.num_mcts_sims = 100              # MCTS sims per move
-        self.exploration_temp = 1.5           # Temperature for move selection
+        self.exploration_temp = 2.0           # Temperature for move selection
         self.cpuct = 1.5                      # Exploration-exploitation balance
         self.temperature_cutoff = 20
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.max_game_length = 80
         self.add_dirichlet_noise = True
         self.dirichlet_alpha = 0.3      # AlphaZero used 0.3 for chess
-        self.dirichlet_epsilon = 0.25 
+        self.dirichlet_epsilon = 0.3 
+        self.opponent_pool_size = 5
+        self.opponent_selection_prob = [0.4, 0.3, 0.2, 0.08, 0.02]
+        self.freeze_opponents = True
+        self.entropy_coeff = 0.01  # New entropy coefficient
+
 class LearningParams:
     def __init__(self):
         self.use_symmetries = True

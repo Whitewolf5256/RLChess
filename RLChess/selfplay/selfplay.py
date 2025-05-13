@@ -1,17 +1,28 @@
-﻿from utils.config import SelfPlayParams
+﻿import torch
+import copy
+import random
+from utils.config import SelfPlayParams
 from utils.logging import log_self_play_results
 from selfplay.parallel_selfplay import run_self_play_game
 
 def self_play_gpu_single_process(nnet, buffer):
     """
-    Single-process self-play using GPU for inference.
-    Plays games until at least 5 of win, lose, draw are added.
+    Self-play with an opponent pool.
+    Keeps a pool of the last 5 models, samples opponents with specified probabilities,
+    and uses entropy regularization.
     """
     cfg = SelfPlayParams()
+    # Set new attributes
+    cfg.opponent_pool_size = 5
+    cfg.opponent_selection_prob = [0.4, 0.3, 0.2, 0.08, 0.02]
+    cfg.freeze_opponents = True
+    cfg.entropy_coeff = 0.01
 
-    # Ensure model is on GPU
     nnet.to(cfg.device)
     nnet.eval()
+
+    # Opponent pool: list of model snapshots (deepcopy of state_dict)
+    opponent_pool = [copy.deepcopy(nnet.state_dict())]
 
     win_count, lose_count, draw_count = 0, 0, 0
     total_games_played = 0
@@ -21,7 +32,29 @@ def self_play_gpu_single_process(nnet, buffer):
 
     while True:
         print(f"[INFO] Starting self-play game {game_num + 1}...")
-        samples, win, lose, draw = run_self_play_game(nnet, cfg, game_num)
+
+        # Select opponent from pool
+        if len(opponent_pool) < cfg.opponent_pool_size:
+            # Not enough models yet, use only available
+            pool_probs = cfg.opponent_selection_prob[:len(opponent_pool)]
+            pool_probs = [p/sum(pool_probs) for p in pool_probs]
+        else:
+            pool_probs = cfg.opponent_selection_prob
+
+        # Choose opponent index
+        opponent_idx = torch.multinomial(
+            torch.tensor(pool_probs), 1
+        ).item()
+        # Load opponent weights into a new model instance
+        opponent_model = copy.deepcopy(nnet)
+        opponent_model.load_state_dict(opponent_pool[opponent_idx])
+        opponent_model.to(cfg.device)
+        opponent_model.eval()
+
+        # Self-play: pass both current model and opponent
+        samples, win, lose, draw = run_self_play_game(
+            nnet, cfg, game_num, opponent_model=opponent_model
+        )
 
         # Count samples before adding to buffer
         win_samples = sum(1 for s in samples if s[2] == 1)
@@ -44,7 +77,24 @@ def self_play_gpu_single_process(nnet, buffer):
 
         if added_win >= 500 and added_lose >= 500 and added_draw >= 500:
             print(f"[INFO] Stopping criteria met.")
+            min_len = min(len(buffer.win), len(buffer.lose), len(buffer.tie))
+            if min_len > 0:
+                buffer.win = random.sample(buffer.win, min_len)
+                buffer.lose = random.sample(buffer.lose, min_len)
+                buffer.tie = random.sample(buffer.tie, min_len)
+                print(f"[Buffer Trimmed] win: {len(buffer.win)}, lose: {len(buffer.lose)}, tie: {len(buffer.tie)}")
+                buffer.save('./replay_buffer.pkl')
             break
+
+        # After each game, update opponent pool (if not freezing, but here we freeze)
+        if not cfg.freeze_opponents:
+            # Add latest model to pool, pop oldest if needed
+            opponent_pool.append(copy.deepcopy(nnet.state_dict()))
+            if len(opponent_pool) > cfg.opponent_pool_size:
+                opponent_pool.pop(0)
+        elif len(opponent_pool) < cfg.opponent_pool_size:
+            # Only fill up the pool once, then freeze
+            opponent_pool.append(copy.deepcopy(nnet.state_dict()))
 
         game_num += 1
 
