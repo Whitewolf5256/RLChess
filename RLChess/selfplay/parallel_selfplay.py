@@ -8,16 +8,23 @@ from utils.logging import log_self_play_results
 import os
 import platform
 import torch
+import copy
+import random
 
-def run_self_play_game(nnet, cfg, game_num, opponent_model=None):
+def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
     """
-    If opponent_model is provided, alternate moves between nnet and opponent_model.
+    If opponent_weights is provided, alternate moves between nnet and opponent_model.
     Otherwise, use nnet for both sides (standard self-play).
     """
     game = ChessGame()
     board = game.reset()
     mcts_nnet = MCTS(game, nnet, cfg)
-    if opponent_model is not None:
+    if opponent_weights is not None:
+        # Create a new model and load weights
+        opponent_model = copy.deepcopy(nnet)
+        opponent_model.load_state_dict(opponent_weights)
+        opponent_model.to(cfg.device)
+        opponent_model.eval()
         mcts_opp = MCTS(game, opponent_model, cfg)
     else:
         mcts_opp = mcts_nnet
@@ -30,12 +37,10 @@ def run_self_play_game(nnet, cfg, game_num, opponent_model=None):
         pi = np.zeros_like(valid, dtype=np.float32)
 
         # Decide which model to use for this move
-        if opponent_model is not None:
+        if opponent_weights is not None:
             # True for white, False for black
-            model_to_use = nnet if board.turn else opponent_model
             mcts_to_use = mcts_nnet if board.turn else mcts_opp
         else:
-            model_to_use = nnet
             mcts_to_use = mcts_nnet
 
         if board.turn == chess.WHITE and t == 0:
@@ -79,16 +84,17 @@ def run_self_play_game(nnet, cfg, game_num, opponent_model=None):
         # Make the move
         board = game.get_next_state(board, action)
         mcts_nnet.update_root(action)
-        if opponent_model is not None:
+        if opponent_weights is not None:
             mcts_opp.update_root(action)
 
         z = game.get_game_ended(board)
         if z != 0:
-            print(f"[INFO] Game {game_num} ended after {t+1} moves. Result: {z}")
+            # print(f"[INFO] Game {game_num} ended after {t+1} moves. Result: {z}")
             break
 
     if z == 0:
-        print(f"[INFO] Game {game_num} ended by tie.")
+        # print(f"[INFO] Game {game_num} ended by tie.")
+        pass
 
     samples = []
     for i, (s_tensor, p, player) in enumerate(data):
@@ -111,16 +117,21 @@ def run_self_play_game(nnet, cfg, game_num, opponent_model=None):
     return samples, win, lose, draw
 
 def _worker(args):
-    nnet, cfg, game_num = args
-    return run_self_play_game(nnet, cfg, game_num)
+    nnet, cfg, game_num, opponent_weights = args
+    return run_self_play_game(nnet, cfg, game_num, opponent_weights=opponent_weights)
 
 def parallel_self_play(nnet, buffer):
     """
-    Launch parallel self-play using multiprocessing.
-    Saves (state_tensor, pi, value, t_rem) to buffer.
-    Returns (win_count, lose_count, draw_count)
+    Launch parallel self-play using multiprocessing and an opponent pool.
+    Each game samples an opponent from the pool.
     """
     cfg = SelfPlayParams()
+    # Opponent pool settings
+    cfg.opponent_pool_size = 5
+    cfg.opponent_selection_prob = [0.4, 0.3, 0.2, 0.08, 0.02]
+    cfg.freeze_opponents = True
+    cfg.entropy_coeff = 0.01
+
     num_games = cfg.num_selfplay_games
     nnet.to("cpu")
 
@@ -134,11 +145,36 @@ def parallel_self_play(nnet, buffer):
     added_win, added_lose, added_draw = 0, 0, 0
     total_games_played = 0
 
+    # Initialize opponent pool with current model
+    opponent_pool = [copy.deepcopy(nnet.state_dict())]
+
+    # Record starting sizes
+    start_win = len(buffer.win)
+    start_lose = len(buffer.lose)
+    start_draw = len(buffer.tie)
+
     def play_batch(batch_size):
         batch_win, batch_lose, batch_draw = 0, 0, 0
+
+        # Prepare opponent pool probabilities
+        if len(opponent_pool) < cfg.opponent_pool_size:
+            pool_probs = cfg.opponent_selection_prob[:len(opponent_pool)]
+            pool_probs = [p / sum(pool_probs) for p in pool_probs]
+        else:
+            pool_probs = cfg.opponent_selection_prob
+
+        # For each game, pick an opponent
+        opponent_indices = random.choices(
+            range(len(opponent_pool)), weights=pool_probs, k=batch_size
+        )
+        opponent_weights_list = [opponent_pool[idx] for idx in opponent_indices]
+
         print(f"[INFO] Launching {batch_size} self-play games using {num_cpus} processes...")
         with mp.Pool(processes=num_cpus) as pool:
-            results = pool.map(_worker, [(nnet, cfg, i) for i in range(batch_size)])
+            results = pool.map(
+                _worker,
+                [(copy.deepcopy(nnet), cfg, i, opponent_weights_list[i]) for i in range(batch_size)]
+            )
 
         for samples, win, lose, draw in results:
             if samples:
@@ -147,11 +183,6 @@ def parallel_self_play(nnet, buffer):
             batch_lose += lose
             batch_draw += draw
         return batch_win, batch_lose, batch_draw
-
-    # Record starting sizes
-    start_win = len(buffer.win)
-    start_lose = len(buffer.lose)
-    start_draw = len(buffer.tie)
 
     while True:
         batch_win, batch_lose, batch_draw = play_batch(num_cpus)
@@ -173,8 +204,15 @@ def parallel_self_play(nnet, buffer):
         print(f"[Run Status] Added since start: Win: {new_win}, Lose: {new_lose}, Tie: {new_draw}")
 
         if new_win >= 500 and new_lose >= 500 and new_draw >= 500:
+            # Fill up the pool if not frozen
+            if not cfg.freeze_opponents:
+                opponent_pool.append(copy.deepcopy(nnet.state_dict()))
+                if len(opponent_pool) > cfg.opponent_pool_size:
+                    opponent_pool.pop(0)
+            elif len(opponent_pool) < cfg.opponent_pool_size:
+                # Only fill up the pool once, then freeze
+                opponent_pool.append(copy.deepcopy(nnet.state_dict()))
             break
-
 
     print(f"[Self-Play Complete] Total Games: {total_games_played} | White Wins: {win_count}, Black Win: {lose_count}, Draws: {draw_count}")
     log_self_play_results(win_count, lose_count, draw_count, filename="logs/self_play/self_play_results.csv")
