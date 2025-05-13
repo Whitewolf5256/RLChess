@@ -125,6 +125,9 @@ def parallel_self_play(nnet, buffer):
     Launch parallel self-play using multiprocessing and an opponent pool.
     Each game samples an opponent from the pool.
     """
+    import random  # Make sure random is imported
+    import copy
+
     cfg = SelfPlayParams()
     # Opponent pool settings
     cfg.opponent_pool_size = 5
@@ -212,6 +215,15 @@ def parallel_self_play(nnet, buffer):
             elif len(opponent_pool) < cfg.opponent_pool_size:
                 # Only fill up the pool once, then freeze
                 opponent_pool.append(copy.deepcopy(nnet.state_dict()))
+            
+            # === Trim the buffer so each category has the same length ===
+            min_len = min(len(buffer.win), len(buffer.lose), len(buffer.tie))
+            if min_len > 0:
+                buffer.win = random.sample(buffer.win, min_len)
+                buffer.lose = random.sample(buffer.lose, min_len)
+                buffer.tie = random.sample(buffer.tie, min_len)
+                print(f"[Buffer Trimmed] win: {len(buffer.win)}, lose: {len(buffer.lose)}, tie: {len(buffer.tie)}")
+                buffer.save('./replay_buffer.pkl')
             break
 
     print(f"[Self-Play Complete] Total Games: {total_games_played} | White Wins: {win_count}, Black Win: {lose_count}, Draws: {draw_count}")
