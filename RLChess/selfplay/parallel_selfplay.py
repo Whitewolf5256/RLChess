@@ -42,14 +42,16 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
             mcts_to_use = mcts_nnet if board.turn else mcts_opp
         else:
             mcts_to_use = mcts_nnet
-
-        if board.turn == chess.WHITE and t == 0:
-            move = board.parse_uci("d2d4")
-            action = game.move_to_index.get(move)
-            if action is None or valid[action] == 0:
-                print(f"[WARN] Invalid forced opening in game {game_num}. Drawing game.")
-                return [], 0, 0, 1
-            pi[action] = 1.0
+            
+        if False:
+            printf();
+        # if board.turn == chess.WHITE and t == 0:
+        #     move = board.parse_uci("d2d4")
+        #     action = game.move_to_index.get(move)
+        #     if action is None or valid[action] == 0:
+        #         print(f"[WARN] Invalid forced opening in game {game_num}. Drawing game.")
+        #         return [], 0, 0, 1
+        #     pi[action] = 1.0
         else:
             temp = cfg.exploration_temp
             if board.turn == chess.WHITE:

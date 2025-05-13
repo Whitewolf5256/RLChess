@@ -45,19 +45,21 @@ def evaluate_new_model(game, model, best_model, cfg):
         print(f"\n[Arena Game {i+1}] Starting - {'New' if players[0] == model else 'Best'} model is White")
 
         # Force 1.d4
-        d4_move = chess.Move.from_uci("d2d4")
-        action = game.move_to_index[d4_move]
-        state = game.get_next_state(state, action)
-        board.push(d4_move)
+        # d4_move = chess.Move.from_uci("d2d4")
+        # action = game.move_to_index[d4_move]
+        # state = game.get_next_state(state, action)
+        # board.push(d4_move)
+        # move_count = 1
+        # current = 0  # White's turn
+
+        # model_type = "New" if players[current] == model else "Best"
+        # color = "White" if board.turn == chess.WHITE else "Black"
+        # print(f"Move {move_count}: {model_type} model ({color}) plays d2d4")
+
+        # move_count += 1
+        # current = 1  # Black's turn
         move_count = 1
-        current = 0  # White's turn
-
-        model_type = "New" if players[current] == model else "Best"
-        color = "White" if board.turn == chess.WHITE else "Black"
-        print(f"Move {move_count}: {model_type} model ({color}) plays d2d4")
-
-        move_count += 1
-        current = 1  # Black's turn
+        current = 0
 
         while True:
             pi = mcts_players[current].get_action_probs(state, temp=0, selfplay=False)

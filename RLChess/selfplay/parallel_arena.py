@@ -26,13 +26,15 @@ def run_arena_game(args):
     board = chess.Board()
 
     # Force 1.d4
-    d4_move = chess.Move.from_uci("d2d4")
-    action = game.move_to_index[d4_move]
-    state = game.get_next_state(state, action)
-    board.push(d4_move)
+    # d4_move = chess.Move.from_uci("d2d4")
+    # action = game.move_to_index[d4_move]
+    # state = game.get_next_state(state, action)
+    # board.push(d4_move)
 
-    current = 1
-    move_count = 2
+    # current = 1
+    # move_count = 2
+    current = 0
+    move_count = 1
     result = 0
     new_cp_loss = 0
     best_cp_loss = 0
