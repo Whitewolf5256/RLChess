@@ -71,3 +71,12 @@ class ChessGame:
                     index_to_move[idx] = m
                     idx += 1
         return move_to_index, index_to_move
+
+    def index_to_uci_move(self, idx):
+        """
+        Convert a move index to UCI format string using the index_to_move mapping.
+        """
+        move = self.index_to_move.get(idx)
+        if move is not None:
+            return move.uci()
+        return "invalid"

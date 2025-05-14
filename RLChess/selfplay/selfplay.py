@@ -71,13 +71,14 @@ def self_play_gpu_single_process(nnet, buffer):
 
         print(f"[Progress] Added Samples - Win: {added_win}, Lose: {added_lose}, Tie: {added_draw}")
 
-        if added_win >= 500 and added_lose >= 500 and added_draw >= 500:
+        # Keeps earliest games 
+        if added_win >= 5000 and added_lose >= 5000 and added_draw >= 5000:
             print(f"[INFO] Stopping criteria met.")
             min_len = min(len(buffer.win), len(buffer.lose), len(buffer.tie))
             if min_len > 0:
-                buffer.win = random.sample(buffer.win, min_len)
-                buffer.lose = random.sample(buffer.lose, min_len)
-                buffer.tie = random.sample(buffer.tie, min_len)
+                buffer.win = buffer.win[:min_len]
+                buffer.lose = buffer.lose[:min_len]
+                buffer.tie = buffer.tie[:min_len]
                 print(f"[Buffer Trimmed] win: {len(buffer.win)}, lose: {len(buffer.lose)}, tie: {len(buffer.tie)}")
                 buffer.save('./replay_buffer.pkl')
             break

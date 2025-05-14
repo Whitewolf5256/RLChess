@@ -5,6 +5,7 @@ from mcts.mcts import MCTS
 from chess_env.chess_game import ChessGame
 from utils.config import SelfPlayParams
 from utils.logging import log_self_play_results
+from utils.logging import log_mcts_moves
 import os
 import platform
 import torch
@@ -15,19 +16,23 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
     """
     If opponent_weights is provided, alternate moves between nnet and opponent_model.
     Otherwise, use nnet for both sides (standard self-play).
+    Logs both White and Black moves in order.
     """
     game = ChessGame()
     board = game.reset()
     mcts_nnet = MCTS(game, nnet, cfg)
+    mcts_nnet.reset_log()
+    played_moves_uci = []
     if opponent_weights is not None:
-        # Create a new model and load weights
         opponent_model = copy.deepcopy(nnet)
         opponent_model.load_state_dict(opponent_weights)
         opponent_model.to(cfg.device)
         opponent_model.eval()
         mcts_opp = MCTS(game, opponent_model, cfg)
+        mcts_opp.reset_log()
     else:
         mcts_opp = mcts_nnet
+
     mcts_nnet.root_state = board
     mcts_opp.root_state = board
     data = []
@@ -38,52 +43,41 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
 
         # Decide which model to use for this move
         if opponent_weights is not None:
-            # True for white, False for black
             mcts_to_use = mcts_nnet if board.turn else mcts_opp
         else:
             mcts_to_use = mcts_nnet
-            
-        if False:
-            printf();
-        # if board.turn == chess.WHITE and t == 0:
-        #     move = board.parse_uci("d2d4")
-        #     action = game.move_to_index.get(move)
-        #     if action is None or valid[action] == 0:
-        #         print(f"[WARN] Invalid forced opening in game {game_num}. Drawing game.")
-        #         return [], 0, 0, 1
-        #     pi[action] = 1.0
-        else:
-            temp = cfg.exploration_temp
-            if board.turn == chess.WHITE:
-                temp *= 1.5
-            if t >= cfg.temperature_cutoff:
-                temp = 0
 
-            pi = mcts_to_use.get_action_probs(board, temp, selfplay=True)
-            s = pi.sum()
-            if s <= 0 or np.isnan(s):
-                print(f"[WARN] Bad pi vector at step {t} in game {game_num}, fixing...")
-                print(f"  pi (before fix): {pi}")
-                print(f"  sum(pi): {s}")
-                print(f"  valid: {valid}")
-                print(f"  num valid moves: {np.sum(valid)}")
-                print(f"  board FEN: {board.fen()}")
-                legal_moves = [move.uci() for move in board.legal_moves]
-                print(f"  legal moves: {legal_moves}")
-                print(f"  legal moves: {legal_moves}")
-                # Optionally, print the state tensor shape/type:
-                # print(f"  state_tensor shape: {state_tensor.shape}, dtype: {state_tensor.dtype}")
-                idxs = np.nonzero(valid)[0]
-                if len(idxs):
-                    pi = np.zeros_like(pi)
-                    pi[idxs] = 1.0 / len(idxs)
-                else:
-                    pi = np.ones_like(pi) / pi.size
+        temp = cfg.exploration_temp
+        if board.turn == chess.WHITE:
+            temp *= 1.5
+        if t >= cfg.temperature_cutoff:
+            temp = 0
+
+        player_str = "White" if board.turn else "Black"
+        pi = mcts_to_use.get_action_probs(
+            board, temp, selfplay=True, board=board, player=player_str, move_number=t
+        )
+        s = pi.sum()
+        if s <= 0 or np.isnan(s):
+            print(f"[WARN] Bad pi vector at step {t} in game {game_num}, fixing...")
+            idxs = np.nonzero(valid)[0]
+            if len(idxs):
+                pi = np.zeros_like(pi)
+                pi[idxs] = 1.0 / len(idxs)
             else:
-                pi = pi / s
+                pi = np.ones_like(pi) / pi.size
+        else:
+            pi = pi / s
 
-            action = np.random.choice(len(pi), p=pi)
+        valid_idxs = np.nonzero(pi)[0]        # Indices of valid moves (pi > 0)
+        pi_valid = pi[valid_idxs]             # Probabilities for valid moves
+        pi_valid = pi_valid / pi_valid.sum()  # Normalize to sum to 1
 
+        action_idx = np.random.choice(len(valid_idxs), p=pi_valid)
+        action = valid_idxs[action_idx]
+        uci_move = game.index_to_uci_move(action)
+        played_moves_uci.append(uci_move)
+        
         current_player = board.turn  # True for White, False for Black
 
         state_tensor = torch.tensor(
@@ -101,12 +95,7 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
 
         z = game.get_game_ended(board)
         if z != 0:
-            # print(f"[INFO] Game {game_num} ended after {t+1} moves. Result: {z}")
             break
-
-    if z == 0:
-        # print(f"[INFO] Game {game_num} ended by tie.")
-        pass
 
     samples = []
     for i, (s_tensor, p, player) in enumerate(data):
@@ -116,7 +105,6 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
             value = 1
         else:
             value = -1
-        t_rem = len(data) - i
         samples.append((s_tensor, p, value))
 
     if z == 1:
@@ -125,6 +113,18 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
         win, lose, draw = 0, 1, 0
     else:
         win, lose, draw = 0, 0, 1
+
+    # --- Merge move logs from both MCTS (for correct move order) ---
+    if opponent_weights is not None:
+        # Sort by move_number to preserve move order
+        backprop_info = {
+            "white": mcts_nnet.get_backpropagation_info(),
+            "black": mcts_opp.get_backpropagation_info()
+        }
+        log_mcts_moves(game_num, played_moves_uci, backprop_info, game, folder="mcts_moves")
+    else:
+        backprop_info = mcts_nnet.get_backpropagation_info()
+        log_mcts_moves(game_num, played_moves_uci, backprop_info, game, folder="mcts_moves")
 
     return samples, win, lose, draw
 
@@ -218,7 +218,7 @@ def parallel_self_play(nnet, buffer):
 
         print(f"[Run Status] Added since start: Win: {new_win}, Lose: {new_lose}, Tie: {new_draw}")
 
-        if new_win >= 500 and new_lose >= 500 and new_draw >= 500:
+        if new_win >= 5000 and new_lose >= 5000 and new_draw >= 5000:
             # Fill up the pool if not frozen
             if not cfg.freeze_opponents:
                 opponent_pool.append(copy.deepcopy(nnet.state_dict()))

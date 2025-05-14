@@ -1,6 +1,8 @@
 ﻿import csv
 import os
 from datetime import datetime
+import chess 
+import chess.pgn
 
 def ensure_log_dir(path):
     os.makedirs(path, exist_ok=True)
@@ -75,3 +77,51 @@ def log_arena_results(
         f.write(f"{'Best White Wins':<30}: {best_white_wins}\n")
         f.write(f"{'Best Black Wins':<30}: {best_black_wins}\n")
         f.write("===========================\n")
+
+def ascii_board(fen):
+    """Return a pretty ASCII board from FEN."""
+    board = chess.Board(fen)
+    return board.unicode(invert_color=False)
+
+def moves_to_pgn(start_fen, move_uci_list):
+    """
+    Convert a list of UCI move strings to a PGN string.
+    """
+    board = chess.Board(start_fen)
+    game = chess.pgn.Game()
+    game.setup(board)
+    node = game
+
+    for uci in move_uci_list:
+        move = chess.Move.from_uci(uci)
+        if move not in board.legal_moves:
+            raise ValueError(f"Move {uci} is not legal in position {board.fen()}")
+        node = node.add_main_variation(move)
+        board.push(move)
+
+    return str(game)
+
+def log_mcts_moves(game_num, move_uci_list, backprop_info, game, folder="mcts_moves"):
+    """
+    Logs played UCI moves to a pretty TXT with Chess.com/PGN info.
+    """
+    os.makedirs(folder, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    pretty_path = os.path.join(folder, f"game_{game_num:04d}_{timestamp}_pretty.txt")
+
+    # Generate PGN and Chess.com instructions
+    start_fen = game.STARTING_FEN if hasattr(game, 'STARTING_FEN') else chess.STARTING_FEN
+    pgn_str = moves_to_pgn(start_fen, move_uci_list)
+
+    with open(pretty_path, "w", encoding="utf-8") as f:
+        f.write(f"Game {game_num}\n" + "="*40 + "\n")
+        f.write("Chess.com analysis link:\n")
+        f.write("1. Copy the PGN below.\n")
+        f.write("2. Go to https://www.chess.com/analysis?tab=analysis\n")
+        f.write("3. Click the PGN tab and paste the PGN.\n\n")
+        f.write(pgn_str + "\n\n")
+        f.write("Move list (UCI):\n")
+        f.write(" ".join(move_uci_list) + "\n\n")
+        f.write("\nBackpropagation info:\n")
+        f.write(str(backprop_info))
+        f.write("\n")

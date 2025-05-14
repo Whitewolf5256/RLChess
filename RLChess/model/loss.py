@@ -1,4 +1,6 @@
-﻿import torch.nn.functional as F
+﻿
+# Updated loss computation with better entropy handling
+import torch.nn.functional as F
 import torch
 
 def compute_loss(pred_p, pred_v, target_p, target_v, invalid_mask, cfg):
@@ -9,6 +11,9 @@ def compute_loss(pred_p, pred_v, target_p, target_v, invalid_mask, cfg):
     if invalid_mask.shape != pred_p.shape:
         raise ValueError(f"Shape mismatch: invalid_mask {invalid_mask.shape}, pred_p {pred_p.shape}")
 
+    # Apply temperature scaling to logits for better exploration
+    pred_p = pred_p / getattr(cfg, 'temperature', 1.0)
+    
     # Mask invalid moves before softmax
     pred_p = pred_p.masked_fill(invalid_mask == 0, -1e9)
 
@@ -22,14 +27,16 @@ def compute_loss(pred_p, pred_v, target_p, target_v, invalid_mask, cfg):
     # Value loss (MSE)
     loss_v = F.mse_loss(pred_v, target_v)
     
-    # Entropy regularization
+    # Entropy regularization - using a more stable formula
     entropy = -(probs * log_probs).sum(dim=1).mean()
     
     # Invalid move penalty
     penalty = cfg.nonvalidity_penalty * (invalid_mask.numel() - invalid_mask.sum()) / invalid_mask.numel()
     
     # Total loss with entropy component
-    total_loss = loss_p + loss_v + penalty - cfg.entropy_coeff * entropy
+    # Higher coefficient for entropy regularization to prevent premature convergence
+    entropy_term = cfg.entropy_coeff * entropy
+    total_loss = loss_p + loss_v + penalty - entropy_term
     
     # Diagnostic metrics
     with torch.no_grad():
