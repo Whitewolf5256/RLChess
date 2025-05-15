@@ -7,7 +7,7 @@ class SelfPlayParams:
         self.num_iters = 100
         self.num_selfplay_games = 100
         if platform.system() == "Windows":
-            self.num_mcts_sims = 100
+            self.num_mcts_sims = 200
         elif platform.system() == "Darwin":
             self.num_mcts_sims = 100
         else:

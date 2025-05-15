@@ -6,20 +6,15 @@ class ChessGame:
         self.move_to_index, self.index_to_move = self._build_move_lookup()
 
     def reset(self):
-        board = chess.Board()
-        return board
+        return chess.Board()
 
     def get_next_state(self, board, action_idx):
-        move = self.index_to_move.get(action_idx)
-        if move not in board.legal_moves:
-            import random
-            legal = list(board.legal_moves)
-            if legal:
-                 move = random.choice(legal)
-            else:
-                return board.copy()
+        move = self.index_to_move[action_idx]
         new_board = board.copy()
-        new_board.push(move)
+        if move in new_board.legal_moves:
+            new_board.push(move)
+        else:
+            raise ValueError(f"Attempted illegal move: {move.uci()}")
         return new_board
 
     def get_valid_moves(self, board):
@@ -58,7 +53,6 @@ class ChessGame:
         return planes
 
     def _build_move_lookup(self):
-        # build the *full* move‐lookup so Black moves aren’t dropped
         move_to_index = {}
         index_to_move = {}
         idx = 0
@@ -66,16 +60,12 @@ class ChessGame:
             for to_sq in chess.SQUARES:
                 for promo in [None, chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT]:
                     m = chess.Move(from_sq, to_sq, promotion=promo)
-                    # we include every combination, no early break
                     move_to_index[m] = idx
                     index_to_move[idx] = m
                     idx += 1
         return move_to_index, index_to_move
 
     def index_to_uci_move(self, idx):
-        """
-        Convert a move index to UCI format string using the index_to_move mapping.
-        """
         move = self.index_to_move.get(idx)
         if move is not None:
             return move.uci()

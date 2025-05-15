@@ -245,6 +245,7 @@ class MCTS:
 
         counts = np.array([self.Nsa.get((s, a), 0) for a in range(len(valid))], dtype=np.float32)
         counts = np.nan_to_num(counts, nan=0.0, posinf=0.0, neginf=0.0)
+        print("counts sum:", counts.sum(), "unique counts:", np.unique(counts))
 
         # deterministic if temp==0
         if temp == 0:
