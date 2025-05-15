@@ -95,25 +95,30 @@ def moves_to_pgn(start_fen, move_uci_list):
     for uci in move_uci_list:
         move = chess.Move.from_uci(uci)
         if move not in board.legal_moves:
-            raise ValueError(f"Move {uci} is not legal in position {board.fen()}")
+            return "illegal move encountered"
         node = node.add_main_variation(move)
         board.push(move)
 
     return str(game)
 
-def log_mcts_moves(game_num, move_uci_list, backprop_info, game, folder="mcts_moves"):
+def log_mcts_moves(game_num, move_uci_list, backprop_info, game, folder):
     """
     Logs played UCI moves to a pretty TXT with Chess.com/PGN info.
+    All games for a given iteration go into the same `folder`.
     """
+    # ensure the folder exists
     os.makedirs(folder, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    pretty_path = os.path.join(folder, f"game_{game_num:04d}_{timestamp}_pretty.txt")
 
-    # Generate PGN and Chess.com instructions
-    start_fen = game.STARTING_FEN if hasattr(game, 'STARTING_FEN') else chess.STARTING_FEN
+    # unique filename per game
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = f"game{game_num:04d}_{timestamp}_pretty.txt"
+    path = os.path.join(folder, filename)
+
+    # generate PGN
+    start_fen = getattr(game, 'STARTING_FEN', chess.STARTING_FEN)
     pgn_str = moves_to_pgn(start_fen, move_uci_list)
 
-    with open(pretty_path, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(f"Game {game_num}\n" + "="*40 + "\n")
         f.write("Chess.com analysis link:\n")
         f.write("1. Copy the PGN below.\n")
@@ -122,6 +127,5 @@ def log_mcts_moves(game_num, move_uci_list, backprop_info, game, folder="mcts_mo
         f.write(pgn_str + "\n\n")
         f.write("Move list (UCI):\n")
         f.write(" ".join(move_uci_list) + "\n\n")
-        f.write("\nBackpropagation info:\n")
-        f.write(str(backprop_info))
-        f.write("\n")
+        f.write("Backpropagation info:\n")
+        f.write(str(backprop_info) + "\n")

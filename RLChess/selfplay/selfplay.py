@@ -4,6 +4,7 @@ import random
 from utils.config import SelfPlayParams
 from utils.logging import log_self_play_results
 from selfplay.parallel_selfplay import run_self_play_game
+import os
 
 def self_play_gpu_single_process(nnet, buffer):
     """
@@ -32,6 +33,7 @@ def self_play_gpu_single_process(nnet, buffer):
 
     while True:
         print(f"[INFO] Starting self-play game {game_num + 1}...")
+        iter_folder = os.path.join("mctsmoves", f"iter{game_num:04d}")
 
         # Select opponent from pool
         if len(opponent_pool) < cfg.opponent_pool_size:
@@ -49,7 +51,11 @@ def self_play_gpu_single_process(nnet, buffer):
 
         # Self-play: pass both current model and opponent weights
         samples, win, lose, draw = run_self_play_game(
-            nnet, cfg, game_num, opponent_weights=opponent_weights
+            nnet,
+            cfg,
+            game_num,
+            opponent_weights=opponent_weights,
+            log_folder=iter_folder,
         )
 
         # Count samples before adding to buffer
@@ -74,7 +80,7 @@ def self_play_gpu_single_process(nnet, buffer):
         # Keeps earliest games 
         if added_win >= 5000 and added_lose >= 5000 and added_draw >= 5000:
             print(f"[INFO] Stopping criteria met.")
-            min_len = min(len(buffer.win), len(buffer.lose), len(buffer.tie))
+            min_len = min(len(buffer.win), len(buffer.lose), len(buffer.tie), 10000)
             if min_len > 0:
                 buffer.win = buffer.win[:min_len]
                 buffer.lose = buffer.lose[:min_len]

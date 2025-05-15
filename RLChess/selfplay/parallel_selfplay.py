@@ -12,7 +12,7 @@ import torch
 import copy
 import random
 
-def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
+def run_self_play_game(nnet, cfg, game_num, opponent_weights=None, log_folder="mcts_moves"):
     """
     If opponent_weights is provided, alternate moves between nnet and opponent_model.
     Otherwise, use nnet for both sides (standard self-play).
@@ -121,10 +121,10 @@ def run_self_play_game(nnet, cfg, game_num, opponent_weights=None):
             "white": mcts_nnet.get_backpropagation_info(),
             "black": mcts_opp.get_backpropagation_info()
         }
-        log_mcts_moves(game_num, played_moves_uci, backprop_info, game, folder="mcts_moves")
+        log_mcts_moves(game_num, played_moves_uci, backprop_info, game, folder=log_folder)
     else:
         backprop_info = mcts_nnet.get_backpropagation_info()
-        log_mcts_moves(game_num, played_moves_uci, backprop_info, game, folder="mcts_moves")
+        log_mcts_moves(game_num, played_moves_uci, backprop_info, game, folder=log_folder)
 
     return samples, win, lose, draw
 

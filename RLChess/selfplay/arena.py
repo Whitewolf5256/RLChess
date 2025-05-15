@@ -18,6 +18,9 @@ def evaluate_new_model(game, model, best_model, cfg):
     model.to(device)
     best_model.to(device)
 
+    best_model.to(device)
+    best_model.eval()
+
     new_wins = 0
     best_wins = 0
     draws = 0
