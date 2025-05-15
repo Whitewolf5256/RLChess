@@ -17,7 +17,7 @@ class SelfPlayParams:
         self.cpuct = 1.5
         self.temperature_cutoff = 20
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.max_game_length = 250
+        self.max_game_length = 300
         self.add_dirichlet_noise = True
         self.dirichlet_alpha = 0.3
         self.dirichlet_epsilon = 0.3
